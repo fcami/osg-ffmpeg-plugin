@@ -247,12 +247,30 @@ const float
 FFmpegVideoReader::get_fps(void) const
 {
     AVStream *      st      = m_fmt_ctx_ptr->streams[m_videoStreamIndex];
-
+    float           fps;
     // Find out the framerate
 #if LIBAVCODEC_VERSION_MAJOR >= 56
-    float           fps = av_q2d(st->avg_frame_rate);
+    // Favorite source is \st->avg_frame_rate
+    // but if it not available, use alternative
+    if (st->avg_frame_rate.den == 0) // denumenator should not be eq to zero
+    {
+        fps = av_q2d(st->r_frame_rate);
+    }
+    else
+    {
+        fps = av_q2d(st->avg_frame_rate);
+    }
 #else
-    float           fps = av_q2d(st->r_frame_rate);
+    // Favorite source is \st->r_frame_rate
+    // but if it not available, use alternative
+    if (st->r_frame_rate.den == 0) // denumenator should not be eq to zero
+    {
+        fps = av_q2d(st->avg_frame_rate);
+    }
+    else
+    {
+        fps = av_q2d(st->r_frame_rate);
+    }
 #endif
 
     return fps;

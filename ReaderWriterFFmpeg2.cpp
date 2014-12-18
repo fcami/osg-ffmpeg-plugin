@@ -97,6 +97,9 @@ public:
         supportsExtension("sdp",    "Session Description Protocol");
         supportsExtension("m2ts",   "MPEG-2 Transport Stream");
 
+        supportsExtension("ogv",   "Unknown format");
+        
+
         supportsOption("format",            "Force setting input format (e.g. vfwcap for Windows webcam)");
         supportsOption("pixel_format",      "Set pixel format");
         supportsOption("frame_size",              "Set frame size (e.g. 320x240)");

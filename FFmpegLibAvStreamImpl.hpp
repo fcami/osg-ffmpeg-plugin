@@ -29,7 +29,7 @@ private:
     const unsigned char             m_AudioBufferTimeSec;
     AudioBuffer                     m_audio_buffer;
     unsigned long                   m_ellapsedAudioMicroSec;
-    unsigned long                   m_audioDelay_ms;
+    unsigned long                   m_audioDelayMicroSec;
     volatile bool                   m_audio_buffering_finished;
     //
     long                            m_videoIndex;
@@ -52,7 +52,7 @@ public:
     virtual                         ~FFmpegLibAvStreamImpl();
 
     virtual void                    setAudioSink(osg::AudioSink * audio_sink);
-    virtual void                    setAudioDelay (const double & audioDelay);
+    virtual void                    setAudioDelayMicroSec (const double & audioDelayMicroSec);
     virtual const int               initialize(const FFmpegFileHolder * pHolder, FFmpegPlayer * pPlayer);
     virtual void                    loop(const bool loop);
     virtual const bool              loop() const;

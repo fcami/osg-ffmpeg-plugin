@@ -45,7 +45,7 @@ FFmpegRenderThread::run()
         {
             tick_start_ms = loopTimer.time_m();
             //
-            // todo: by some reason, by the time(minute and more) video out from the sync with audio
+            //
             if (m_pLibAvStream->isHasAudio())
                 timePosMS = m_pLibAvStream->GetAudioPlaybackTime();
             else

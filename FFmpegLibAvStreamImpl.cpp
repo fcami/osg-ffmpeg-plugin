@@ -7,6 +7,8 @@
 namespace osgFFmpeg
 {
 
+// todo: When audio reader grabbs all audio, it seems that timer stops, and video do not change frames.
+
 FFmpegLibAvStreamImpl::FFmpegLibAvStreamImpl()
 :m_AudioBufferTimeSec(6),
 m_ellapsedAudioMicroSec(0),
@@ -43,9 +45,9 @@ FFmpegLibAvStreamImpl::setAudioSink(osg::AudioSink * audio_sink)
 }
 
 void
-FFmpegLibAvStreamImpl::setAudioDelay (const double & audioDelay)
+FFmpegLibAvStreamImpl::setAudioDelayMicroSec (const double & audioDelayMicroSec)
 {
-    m_audioDelay_ms = audioDelay;
+    m_audioDelayMicroSec = audioDelayMicroSec;
 }
 
 const int
@@ -120,7 +122,7 @@ FFmpegLibAvStreamImpl::GetAudioPlaybackTime() const
     if (m_audio_buffering_finished == true)
         return std::numeric_limits<unsigned long>::max();
 
-    return (m_ellapsedAudioMicroSec < m_audioDelay_ms * 1000) ? 0 : (m_ellapsedAudioMicroSec - m_audioDelay_ms*1000)/1000;
+    return (m_ellapsedAudioMicroSec < m_audioDelayMicroSec) ? 0 : (m_ellapsedAudioMicroSec - m_audioDelayMicroSec)/1000;
 }
 
 void
@@ -282,7 +284,7 @@ FFmpegLibAvStreamImpl::preRun()
     // Prepare Audio to streaming
     //
     m_audio_buffering_finished = true;
-    m_audioDelay_ms = 0;
+    m_audioDelayMicroSec = 0;
     if (isHasAudio())
     {
         if (m_audio_sink.valid())
@@ -377,7 +379,7 @@ FFmpegLibAvStreamImpl::startPlayback()
         m_audio_sink.valid() &&
         m_audio_sink->playing() == false)
     {
-        setAudioDelay ( m_audio_sink->getDelay() );
+        setAudioDelayMicroSec ( m_audio_sink->getDelay() * 1000.0 );
         //
         m_audio_sink->play();
     }
