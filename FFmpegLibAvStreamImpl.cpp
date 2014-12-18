@@ -220,7 +220,7 @@ FFmpegLibAvStreamImpl::GetFramePtr(const unsigned long & timePosMS, unsigned cha
     try
     {
         err = m_video_buffer.GetFramePtr (timePosMS, pArray);
-        if (err < 0)
+        if (err != 0)
         {
             //
             // Clear buffer to load next block

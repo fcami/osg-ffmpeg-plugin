@@ -92,16 +92,28 @@ FFmpegFileHolder::open (const std::string & filename, FFmpegParameters* paramete
             m_audioFormat.m_channelsNb      = audioInfo[1];
             m_audioFormat.m_sampleRate      = audioInfo[2];
             m_audioFormat.m_avSampleFormat  = (AVSampleFormat)audioInfo[3];
+            //
+            // Because SDL available for: AUDIO_U16SYS,AUDIO_S16SYS,AUDIO_S32SYS,AUDIO_F32SYS only (see "SDL_audio.h")
+            // we can use limited set of output sample format only.
+            // Moreover, base test-app (Example osgmovie) use "AUDIO_S16SYS" hardcoded, so
+            // let it be follow:
+            //
+            m_audioFormat.m_bytePerSample   = 2;
+            m_audioFormat.m_avSampleFormat  = AV_SAMPLE_FMT_S16;
+            //
+            // Limit output by Stereo
+            if (m_audioFormat.m_channelsNb > 2)
+                m_audioFormat.m_channelsNb  = 2;
         }
         //
         // Open For Video
         //
-        m_frameSize.Width = 640;    // default
-        m_frameSize.Height = 480;   // values
-        m_alpha_channel = false;
+        m_frameSize.Width                   = 640;  // default
+        m_frameSize.Height                  = 480;  // values
+        m_alpha_channel                     = false;
         //
-        const bool useRGB_notBGR = true;    // all Video-data will be represented as RGB24
-        const long scaledWidth = 0;         // actual video size will produced
+        const bool useRGB_notBGR            = true; // all Video-data will be represented as RGB24
+        const long scaledWidth              = 0;    // actual video size will produced
 
         m_videoIndex = FFmpegWrapper::openVideo(filename.c_str(),
                                                 parameters,

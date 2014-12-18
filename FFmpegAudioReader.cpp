@@ -17,10 +17,14 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
 	m_audioStreamIndex                  = -1;
 	m_output_buffer                     = NULL;
 	m_reader_buffer_shift               = 0;
-    m_audio_resample_cntx               = NULL;
 	m_output_buffer_length_prev         = 0;
 	m_FirstFrame                        = true;
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+    m_audio_swr_cntx                    = NULL;
+#else
+    m_audio_resample_cntx               = NULL;
 	m_audio_intermediate_resample_cntx  = NULL;
+#endif
     m_fmt_ctx_ptr                       = NULL;
     //
     //
@@ -134,6 +138,131 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
 	return 0;
 }
 
+const int
+FFmpegAudioReader::decodeAudio (int & buffer_size)
+{
+    AVCodecContext *pCodecCtx   = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+    AVFrame *       frame = av_frame_alloc();
+    if (!frame)
+        return -1;
+
+    int             got_frame   = 0;
+    int             result      = avcodec_decode_audio4 (pCodecCtx, frame, & got_frame, & m_packet);
+
+    if (result >= 0 && got_frame)
+    {
+        size_t      write_p;
+        size_t      nb;
+        int         ch;
+        int         plane_size;
+        const int   planar      = av_sample_fmt_is_planar(pCodecCtx->sample_fmt);
+        const int   data_size   = av_samples_get_buffer_size (&plane_size, pCodecCtx->channels, frame->nb_samples, pCodecCtx->sample_fmt, 1);
+        if (buffer_size < data_size)
+        {
+            av_log(pCodecCtx, AV_LOG_ERROR, "output buffer size is too small for "
+            "the current frame (%d < %d)\n", buffer_size, data_size);
+            av_frame_free (& frame);
+            return -1;
+        }
+        //
+        // Resample planar audio
+        //
+        write_p = 0;
+        switch (pCodecCtx->sample_fmt)
+        {
+        case AV_SAMPLE_FMT_U8P: // to AV_SAMPLE_FMT_U8
+            {
+                uint8_t *       out = (uint8_t *)m_decode_buffer;
+                const size_t    nbmax = plane_size/sizeof(uint8_t);
+                for (nb = 0; nb < nbmax; ++nb)
+                {
+                    for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                    {
+                        out[write_p] = ((uint8_t *) frame->extended_data[ch])[nb];
+                        ++write_p;
+                    }
+                }
+                break;
+            }
+        case AV_SAMPLE_FMT_S16P: // to AV_SAMPLE_FMT_S16
+            {
+                int16_t *       out = (int16_t *)m_decode_buffer;
+                const size_t    nbmax = plane_size/sizeof(int16_t);
+                for (nb = 0; nb < nbmax; ++nb)
+                {
+                    for (int ch = 0; ch < pCodecCtx->channels; ++ch)
+                    {
+                        out[write_p] = ((int16_t *) frame->extended_data[ch])[nb];
+                        ++write_p;
+                    }
+                }
+                break;
+            }
+        case AV_SAMPLE_FMT_S32P: // to AV_SAMPLE_FMT_S32
+            {
+                int32_t *       out = (int32_t *)m_decode_buffer;
+                const size_t    nbmax = plane_size/sizeof(int32_t);
+                for (nb = 0; nb < nbmax; ++nb)
+                {
+                    for (int ch = 0; ch < pCodecCtx->channels; ++ch)
+                    {
+                        out[write_p] = ((int32_t *) frame->extended_data[ch])[nb];
+                        ++write_p;
+                    }
+                }
+                break;
+            }
+        case AV_SAMPLE_FMT_FLTP: // to AV_SAMPLE_FMT_FLT
+            {
+                float *         out = (float *)m_decode_buffer;
+                const size_t    nbmax = plane_size/sizeof(float);
+                for (nb = 0; nb < nbmax; ++nb)
+                {
+                    for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                    {
+                        out[write_p] = ((float *) frame->extended_data[ch])[nb];
+                        ++write_p;
+                    }
+                }
+                break;
+            }
+        case AV_SAMPLE_FMT_DBLP: // to AV_SAMPLE_FMT_DBL
+            {
+                double *        out = (double *)m_decode_buffer;
+                const size_t    nbmax = plane_size/sizeof(double);
+                for (nb = 0; nb < nbmax; ++nb)
+                {
+                    for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                    {
+                        out[write_p] = ((double *) frame->extended_data[ch])[nb];
+                        ++write_p;
+                    }
+                }
+                break;
+            }
+        };
+
+        buffer_size = data_size;
+    }
+    else
+    {
+        buffer_size = 0;
+    }
+
+    av_frame_free (& frame);
+
+    return result;
+#elif LIBAVCODEC_VERSION_MAJOR >= 53 || (LIBAVCODEC_VERSION_MAJOR==52 && LIBAVCODEC_VERSION_MINOR>=32)
+    // following code segment copied from ffmpeg's avcodec_decode_audio2()
+    // implementation to avoid warnings about deprecated function usage.
+    return avcodec_decode_audio3(pCodecCtx, (int16_t*)m_decode_buffer, & buffer_size, & m_packet);
+#else
+    // fallback for older versions of ffmpeg that don't have avcodec_decode_audio3.
+    return avcodec_decode_audio2(pCodecCtx, (int16_t*)m_decode_buffer, & buffer_size, m_packet.data, m_packet.size);
+#endif
+}
+
 bool
 FFmpegAudioReader::GetNextFrame(double & currTime, int16_t * output_buffer, unsigned int & output_buffer_size)
 {
@@ -161,7 +290,7 @@ FFmpegAudioReader::GetNextFrame(double & currTime, int16_t * output_buffer, unsi
             buffer_size = AVCODEC_MAX_AUDIO_FRAME_SIZE;
 
             // Decode the next chunk of data
-			bytesDecoded = avcodec_decode_audio3(pCodecCtx, (int16_t*)m_decode_buffer, &buffer_size, &m_packet);
+            bytesDecoded = decodeAudio (buffer_size);
 
             if (bytesDecoded < 0)
 			{
@@ -219,7 +348,7 @@ FFmpegAudioReader::GetNextFrame(double & currTime, int16_t * output_buffer, unsi
     }
 
     // Decode the rest of the last frame
-	bytesDecoded = avcodec_decode_audio3(pCodecCtx, (int16_t*)m_decode_buffer, &buffer_size, &m_packet);
+    bytesDecoded = decodeAudio (buffer_size);
 
     // Free last packet
     if(m_packet.data!=NULL)
@@ -279,8 +408,20 @@ FFmpegAudioReader::getChannels(void) const
 const AVSampleFormat
 FFmpegAudioReader::getSampleFormat(void) const
 {
+    AVSampleFormat  result;
+
     AVCodecContext *pCodecCtx = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
-    return pCodecCtx->sample_fmt;
+    result = pCodecCtx->sample_fmt;
+
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+    const int planar        = av_sample_fmt_is_planar(pCodecCtx->sample_fmt);
+    if (planar != 0)
+    {
+        result = av_get_packed_sample_fmt (pCodecCtx->sample_fmt);
+    }
+#endif
+
+    return result;
 }
 const int
 FFmpegAudioReader::getSampleSizeInBytes(void) const
@@ -310,6 +451,13 @@ FFmpegAudioReader::get_duration(void) const
 void
 FFmpegAudioReader::release_params_getSample(void)
 {
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+    if (m_audio_swr_cntx)
+    {
+        swr_free( & m_audio_swr_cntx);
+        m_audio_swr_cntx = NULL;
+    }
+#else
     if (m_audio_resample_cntx)
     {
         audio_resample_close(m_audio_resample_cntx);
@@ -320,6 +468,7 @@ FFmpegAudioReader::release_params_getSample(void)
         audio_resample_close(m_audio_intermediate_resample_cntx);
         m_audio_intermediate_resample_cntx = NULL;
     }
+#endif
     m_reader_buffer_shift = 0;
     if (m_output_buffer)
     {
@@ -327,6 +476,27 @@ FFmpegAudioReader::release_params_getSample(void)
         m_output_buffer = NULL;
     }
     m_output_buffer_length_prev = 0;
+}
+
+const int
+FFmpegAudioReader::guessLayoutByChannelsNb(const int & chNb)
+{
+    int     layout = AV_CH_LAYOUT_STEREO;
+
+    switch (chNb)
+    {
+    case 1:
+        layout = AV_CH_LAYOUT_MONO;
+        break;
+    case 2:
+        layout = AV_CH_LAYOUT_STEREO;
+        break;
+    case 6:
+        layout = AV_CH_LAYOUT_5POINT1;
+        break;
+    };
+
+    return layout;
 }
 
 const int
@@ -356,6 +526,7 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
     }
 
     //
+    AVCodecContext *        pCodecCtx               = input_audio->m_fmt_ctx_ptr->streams[input_audio->m_audioStreamIndex]->codec;
     const int       		input_FrameRate         = input_audio->getFrameRate();
     const int				input_Channels          = input_audio->getChannels();
     //
@@ -438,6 +609,39 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
 			if (input_buffer_size > readed_from_decoder)
 				input_buffer_size = readed_from_decoder;
 
+			int audio_resample_rc;
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+            const int output_layout = guessLayoutByChannelsNb(output_channels);
+            // Fix when layout is not set.
+            const int input_layout = pCodecCtx->channel_layout == 0 ? guessLayoutByChannelsNb(input_Channels) : pCodecCtx->channel_layout;
+            //
+            // For this version it is enough to use one resampler
+            if (input_audio->m_audio_swr_cntx == NULL)
+            {
+                int er;
+                input_audio->m_audio_swr_cntx = swr_alloc();
+                if (input_audio->m_audio_swr_cntx == NULL)
+                    return -1;
+                er = av_opt_set_int(input_audio->m_audio_swr_cntx, "in_channel_layout",  input_layout, 0);
+                er = av_opt_set_int(input_audio->m_audio_swr_cntx, "out_channel_layout", output_layout,  0);
+                er = av_opt_set_int(input_audio->m_audio_swr_cntx, "in_sample_rate",     input_FrameRate, 0);
+                er = av_opt_set_int(input_audio->m_audio_swr_cntx, "out_sample_rate",    output_FrameRate, 0);
+                er = av_opt_set_sample_fmt(input_audio->m_audio_swr_cntx, "in_sample_fmt",  input_sampleFormat, 0);
+                er = av_opt_set_sample_fmt(input_audio->m_audio_swr_cntx, "out_sample_fmt", output_sampleFormat,  0);
+                er = swr_init(input_audio->m_audio_swr_cntx);
+                if (er != 0)
+                {
+                    fprintf (stderr, "Cannot init resampler for video\n");
+                    return -1;
+                }
+            }
+            const unsigned long   nb_resample_samples = input_buffer_size / input_Channels / input_sampleformat_size;
+            audio_resample_rc = swr_convert(input_audio->m_audio_swr_cntx,
+                                    (uint8_t**)(&bufSamples),
+                                    nb_resample_samples,
+                                    (const uint8_t**)(&(input_audio->m_output_buffer)),
+                                    nb_resample_samples);
+#else
 			if (input_audio->m_audio_resample_cntx == NULL)
 			{
 			    if (input_Channels == 6 && (output_channels != 2 && output_channels != 6))
@@ -463,7 +667,6 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
                                                                                  16, 10, 1, 1.0);
 			    }
 			}
-			int audio_resample_rc;
 			if (input_audio->m_audio_intermediate_resample_cntx == NULL)
 			{
                 /* resample audio. 'nb_resample_samples' is the number of input samples */
@@ -489,7 +692,7 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
                                                         audio_resample_intermediate_rc);
                 av_free (intermediate_buffer);
 			}
-
+#endif
 			input_audio->m_reader_buffer_shift = reader_buffer_shift_0 - input_buffer_size;
 
 			memmove (input_audio->m_output_buffer,

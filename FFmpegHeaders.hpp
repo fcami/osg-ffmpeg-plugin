@@ -21,6 +21,11 @@ extern "C"
     #include <libswscale/swscale.h>
 #endif
 
+// todo: this lib should be added to CMake
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+#include <libswresample/swresample.h>
+#endif
+
 #if LIBAVUTIL_VERSION_INT <  AV_VERSION_INT(50,38,0)
 #define AV_SAMPLE_FMT_NONE SAMPLE_FMT_NONE
 #define AV_SAMPLE_FMT_U8   SAMPLE_FMT_U8

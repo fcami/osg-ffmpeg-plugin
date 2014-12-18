@@ -5,6 +5,10 @@
 
 namespace osgFFmpeg {
 
+#ifndef AVCODEC_MAX_AUDIO_FRAME_SIZE
+#define AVCODEC_MAX_AUDIO_FRAME_SIZE 192000
+#endif
+
 class FFmpegParameters;
 
 class FFmpegAudioReader
@@ -12,9 +16,13 @@ class FFmpegAudioReader
 private:
     int16_t *               m_output_buffer;
     unsigned char           m_intermediate_channelsNb;
-    ReSampleContext *       m_audio_intermediate_resample_cntx;
-    unsigned long	        m_output_buffer_length_prev;
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+    SwrContext *            m_audio_swr_cntx;
+#else
     ReSampleContext *       m_audio_resample_cntx;
+    ReSampleContext *       m_audio_intermediate_resample_cntx;
+#endif
+    unsigned long	        m_output_buffer_length_prev;
     unsigned int		    m_reader_buffer_shift;
     int8_t                  m_decode_buffer[AVCODEC_MAX_AUDIO_FRAME_SIZE];
     //
@@ -24,7 +32,9 @@ private:
     int                     m_bytesRemaining;
     AVPacket         	    m_packet;
 
+    static const int        guessLayoutByChannelsNb(const int & chNb);
     void                    release_params_getSample(void);
+    const int               decodeAudio(int & buffer_size);
     bool                    GetNextFrame(double & currTime, int16_t * output_buffer, unsigned int & output_buffer_size);
 public:
     const int               openFile(const char *filename, FFmpegParameters * parameters);

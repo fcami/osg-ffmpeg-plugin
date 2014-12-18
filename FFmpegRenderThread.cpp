@@ -39,11 +39,13 @@ FFmpegRenderThread::run()
         double                  tick_end_ms;
         double                  frame_ms;
         double                  dist_frame_ms;
+        int                     iErr;
         //
         while (m_renderingThreadStop == false)
         {
             tick_start_ms = loopTimer.time_m();
             //
+            // todo: by some reason, by the time(minute and more) video out from the sync with audio
             if (m_pLibAvStream->isHasAudio())
                 timePosMS = m_pLibAvStream->GetAudioPlaybackTime();
             else
@@ -51,8 +53,8 @@ FFmpegRenderThread::run()
 
             {
                 // todo: should be processed to error
-                int iErr = m_pLibAvStream->GetFramePtr (timePosMS, pFramePtr);
-                if (pFramePtr != NULL)
+                iErr = m_pLibAvStream->GetFramePtr (timePosMS, pFramePtr);
+                if (pFramePtr != NULL && iErr == 0)
                 {
                     m_pImgStream->setImage(
                         m_frameSize.Width,
