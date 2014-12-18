@@ -42,6 +42,7 @@ private:
     FFmpegPlayer *                  m_pPlayer;
     volatile bool                   m_shadowThreadStop;
     void                            preRun();
+    void                            startPlayback();
     virtual void                    run ();
     void                            postRun();
     void                            stopShadowThread();

@@ -199,7 +199,7 @@ public:
     // - [msTime] - Fictive parameter. Does not use;
     // - size of bufSamples(in bytes) should be at less = [samplesNb]*[channelsNb]*[sizeofSample/*according to \output_sampleFormat*/]
     // #warning TODO (ROS#1#): When grab some files (example: Bunny.ogg) first grab will return 0 but should not.
-    static const long getAudioSamples(const long indexFile,
+    static const int getAudioSamples(const long indexFile,
                                         unsigned long msTime,
                                         unsigned short channelsNb,
                                         const AVSampleFormat & output_sampleFormat,

@@ -280,8 +280,6 @@ FFmpegLibAvStreamImpl::preRun()
     const unsigned long elapsedTimeMS = m_playerTimer.ElapsedMilliseconds ();
     m_ellapsedAudioMS = 0;
 
-    //todo: actually after pause, we can do not flush buffers and seeking streams.
-
     //
     // Prepare Audio to streaming
     //
@@ -373,6 +371,23 @@ FFmpegLibAvStreamImpl::postRun()
 }
 
 void
+FFmpegLibAvStreamImpl::startPlayback()
+{
+    m_playerTimer.Start();
+    //
+    if (isHasAudio() &&
+        m_audio_sink.valid() &&
+        m_audio_sink->playing() == false)
+    {
+        setAudioDelay ( m_audio_sink->getDelay() );
+        //
+        m_audio_sink->play();
+    }
+    if (isHasVideo())
+        m_renderer.start();
+}
+
+void
 FFmpegLibAvStreamImpl::run()
 {
     Mutex                   lockMutex;
@@ -390,19 +405,7 @@ FFmpegLibAvStreamImpl::run()
         bool                    videoBufferFull;
         bool                    audioBufferFull;
         //
-        m_playerTimer.Start();
-        //
-        if (isHasAudio() &&
-            m_audio_sink.valid() &&
-            m_audio_sink->playing() == false)
-        {
-            setAudioDelay ( m_audio_sink->getDelay() );
-            //
-            m_audio_sink->play();
-        }
-        if (isHasVideo())
-            m_renderer.start();
-
+        bool    isPlaybackStarted = false;
         int     necAudioSpace = minBlockSize; // may take only two valus: 1) minBlockSize 2) m_audio_buffer.size() / 2
         while (m_shadowThreadStop == false)
         {
@@ -471,11 +474,18 @@ FFmpegLibAvStreamImpl::run()
                 break;
             }
             //
-            // If buffers are full it may couse to get too many empty loops,
-            // so locks this thread till some buffer opens for writing
+            // If buffers are full:
+            //
+            // 1. If it is first buffer's full state, we may start playback.
+            // 2. it may couse to get too many empty loops, so locks this thread till some buffer opens for writing
             //
             if (audioBufferFull && videoBufferFull)
             {
+                if (isPlaybackStarted == false)
+                {
+                    isPlaybackStarted = true;
+                    startPlayback();
+                }
                 if (m_shadowThreadStop == false)
                     m_threadLocker.wait (& lockMutex);
             }

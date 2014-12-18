@@ -148,13 +148,14 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
         return -1;
 
     int             got_frame   = 0;
-    int             result      = avcodec_decode_audio4 (pCodecCtx, frame, & got_frame, & m_packet);
+    int             result;
+    do
+    {
+        result      = avcodec_decode_audio4 (pCodecCtx, frame, & got_frame, & m_packet);
+    } while (result == AVERROR(EAGAIN) || !got_frame);
 
     if (result >= 0 && got_frame)
     {
-        size_t      write_p;
-        size_t      nb;
-        int         ch;
         int         plane_size;
         const int   planar      = av_sample_fmt_is_planar(pCodecCtx->sample_fmt);
         const int   data_size   = av_samples_get_buffer_size (&plane_size, pCodecCtx->channels, frame->nb_samples, pCodecCtx->sample_fmt, 1);
@@ -166,83 +167,95 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
             return -1;
         }
         //
-        // Resample planar audio
+        // Resample planar/nonplanar audio
         //
-        write_p = 0;
-        switch (pCodecCtx->sample_fmt)
+        if (planar != 0)
         {
-        case AV_SAMPLE_FMT_U8P: // to AV_SAMPLE_FMT_U8
+            //
+            // Convert data according to format which obtained by
+            // av_get_packed_sample_fmt (pCodecCtx->sample_fmt);
+            //
+            size_t      write_p = 0;
+            size_t      nb;
+            int         ch;
+            switch (pCodecCtx->sample_fmt)
             {
-                uint8_t *       out = (uint8_t *)m_decode_buffer;
-                const size_t    nbmax = plane_size/sizeof(uint8_t);
-                for (nb = 0; nb < nbmax; ++nb)
+            case AV_SAMPLE_FMT_U8P: // to AV_SAMPLE_FMT_U8
                 {
-                    for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                    uint8_t *       out = (uint8_t *)m_decode_buffer;
+                    const size_t    nbmax = plane_size/sizeof(uint8_t);
+                    for (nb = 0; nb < nbmax; ++nb)
                     {
-                        out[write_p] = ((uint8_t *) frame->extended_data[ch])[nb];
-                        ++write_p;
+                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                        {
+                            out[write_p] = ((uint8_t *) frame->extended_data[ch])[nb];
+                            ++write_p;
+                        }
                     }
+                    break;
                 }
-                break;
-            }
-        case AV_SAMPLE_FMT_S16P: // to AV_SAMPLE_FMT_S16
-            {
-                int16_t *       out = (int16_t *)m_decode_buffer;
-                const size_t    nbmax = plane_size/sizeof(int16_t);
-                for (nb = 0; nb < nbmax; ++nb)
+            case AV_SAMPLE_FMT_S16P: // to AV_SAMPLE_FMT_S16
                 {
-                    for (int ch = 0; ch < pCodecCtx->channels; ++ch)
+                    int16_t *       out = (int16_t *)m_decode_buffer;
+                    const size_t    nbmax = plane_size/sizeof(int16_t);
+                    for (nb = 0; nb < nbmax; ++nb)
                     {
-                        out[write_p] = ((int16_t *) frame->extended_data[ch])[nb];
-                        ++write_p;
+                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                        {
+                            out[write_p] = ((int16_t *) frame->extended_data[ch])[nb];
+                            ++write_p;
+                        }
                     }
+                    break;
                 }
-                break;
-            }
-        case AV_SAMPLE_FMT_S32P: // to AV_SAMPLE_FMT_S32
-            {
-                int32_t *       out = (int32_t *)m_decode_buffer;
-                const size_t    nbmax = plane_size/sizeof(int32_t);
-                for (nb = 0; nb < nbmax; ++nb)
+            case AV_SAMPLE_FMT_S32P: // to AV_SAMPLE_FMT_S32
                 {
-                    for (int ch = 0; ch < pCodecCtx->channels; ++ch)
+                    int32_t *       out = (int32_t *)m_decode_buffer;
+                    const size_t    nbmax = plane_size/sizeof(int32_t);
+                    for (nb = 0; nb < nbmax; ++nb)
                     {
-                        out[write_p] = ((int32_t *) frame->extended_data[ch])[nb];
-                        ++write_p;
+                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                        {
+                            out[write_p] = ((int32_t *) frame->extended_data[ch])[nb];
+                            ++write_p;
+                        }
                     }
+                    break;
                 }
-                break;
-            }
-        case AV_SAMPLE_FMT_FLTP: // to AV_SAMPLE_FMT_FLT
-            {
-                float *         out = (float *)m_decode_buffer;
-                const size_t    nbmax = plane_size/sizeof(float);
-                for (nb = 0; nb < nbmax; ++nb)
+            case AV_SAMPLE_FMT_FLTP: // to AV_SAMPLE_FMT_FLT
                 {
-                    for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                    float *         out = (float *)m_decode_buffer;
+                    const size_t    nbmax = plane_size/sizeof(float);
+                    for (nb = 0; nb < nbmax; ++nb)
                     {
-                        out[write_p] = ((float *) frame->extended_data[ch])[nb];
-                        ++write_p;
+                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                        {
+                            out[write_p] = ((float *) frame->extended_data[ch])[nb];
+                            ++write_p;
+                        }
                     }
+                    break;
                 }
-                break;
-            }
-        case AV_SAMPLE_FMT_DBLP: // to AV_SAMPLE_FMT_DBL
-            {
-                double *        out = (double *)m_decode_buffer;
-                const size_t    nbmax = plane_size/sizeof(double);
-                for (nb = 0; nb < nbmax; ++nb)
+            case AV_SAMPLE_FMT_DBLP: // to AV_SAMPLE_FMT_DBL
                 {
-                    for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                    double *        out = (double *)m_decode_buffer;
+                    const size_t    nbmax = plane_size/sizeof(double);
+                    for (nb = 0; nb < nbmax; ++nb)
                     {
-                        out[write_p] = ((double *) frame->extended_data[ch])[nb];
-                        ++write_p;
+                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                        {
+                            out[write_p] = ((double *) frame->extended_data[ch])[nb];
+                            ++write_p;
+                        }
                     }
+                    break;
                 }
-                break;
-            }
-        };
-
+            };
+        }
+        else
+        {
+            memcpy (m_decode_buffer, frame->data[0], data_size);
+        }
         buffer_size = data_size;
     }
     else
@@ -256,7 +269,15 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
 #elif LIBAVCODEC_VERSION_MAJOR >= 53 || (LIBAVCODEC_VERSION_MAJOR==52 && LIBAVCODEC_VERSION_MINOR>=32)
     // following code segment copied from ffmpeg's avcodec_decode_audio2()
     // implementation to avoid warnings about deprecated function usage.
-    return avcodec_decode_audio3(pCodecCtx, (int16_t*)m_decode_buffer, & buffer_size, & m_packet);
+    int loc_buffer_size;
+    int ret_value;
+    do
+    {
+        loc_buffer_size = buffer_size; // value should be defined before
+        ret_value = avcodec_decode_audio3(pCodecCtx, (int16_t*)m_decode_buffer, & loc_buffer_size, & m_packet);
+    } while (!loc_buffer_size);
+    buffer_size = loc_buffer_size;
+    return ret_value;
 #else
     // fallback for older versions of ffmpeg that don't have avcodec_decode_audio3.
     return avcodec_decode_audio2(pCodecCtx, (int16_t*)m_decode_buffer, & buffer_size, m_packet.data, m_packet.size);

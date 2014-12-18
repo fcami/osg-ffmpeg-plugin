@@ -371,7 +371,7 @@ FFmpegWrapper::getAudioInfo(const long indexFile, unsigned long * data)
     return rez_value;
 }
 
-const long
+const int
 FFmpegWrapper::getAudioSamples(const long indexFile,
                                 unsigned long msTime,
                                 unsigned short channelsNb,
@@ -380,7 +380,7 @@ FFmpegWrapper::getAudioSamples(const long indexFile,
                                 unsigned long samplesNb,
                                 unsigned char * bufSamples)
 {
-	long rez_value = -1;
+	int rez_value = -1;
 	try
 	{
 		if (checkIndexAudioValid(indexFile) == 0)
