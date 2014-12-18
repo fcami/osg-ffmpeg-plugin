@@ -156,22 +156,23 @@ AudioBuffer::write (const unsigned char * data, const int & bytesNb)
     return 0;
 }
 
-const bool
-AudioBuffer::isEnoughWriteSpace(const int & blockSize) const
+const unsigned int
+AudioBuffer::freeSpaceSize() const
 {
     // Fix local value of cross-thread params
     const int loc_endIndicator      = m_endIndicator;
     const int loc_startIndicator    = m_startIndicator;
     //
-    const bool isSwitchEnd          = (loc_endIndicator + blockSize) % m_bufferSize != loc_endIndicator + blockSize;
-    const bool signBefore           = loc_endIndicator - loc_startIndicator > 0;
-    const bool signAfter            = (loc_endIndicator + blockSize) % m_bufferSize - loc_startIndicator > 0;
-    const bool isSignConst          = signBefore == signAfter;
-    //
-    if (isSwitchEnd != isSignConst || loc_startIndicator == loc_endIndicator)
-        return true;
-
-    return false;
+    unsigned int    result = 0;
+    if (loc_endIndicator >= loc_startIndicator)
+    {
+        result = m_bufferSize - (loc_endIndicator - loc_startIndicator);
+    }
+    else
+    {
+        result = loc_startIndicator - loc_endIndicator;
+    }
+    return result;
 }
 
 const unsigned int

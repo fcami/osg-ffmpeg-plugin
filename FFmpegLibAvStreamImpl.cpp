@@ -200,7 +200,7 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
     // Signal thread that audio needs new samples
     // To avoid overloading the grabbing thread, signal when free space more than half of buffer-size
     //
-    if (m_audio_buffer.isEnoughWriteSpace (m_audio_buffer.size() / 2))
+    if (m_audio_buffer.freeSpaceSize() > m_audio_buffer.size() / 2)
         m_threadLocker.signal();
 
     m_ellapsedAudioMicroSec += playbackSec * 1000000.0;
@@ -416,6 +416,7 @@ FFmpegLibAvStreamImpl::run()
             //
             if (isHasAudio() && pAudioData != NULL)
             {
+                const unsigned int space_audio_size = m_audio_buffer.freeSpaceSize();
                 // Optimizing for grabbing audio:
                 //
                 // 1. If audio buffer almost full, thread stops grabbing audio, to put more time for grabbing video
@@ -423,7 +424,7 @@ FFmpegLibAvStreamImpl::run()
                 if (necAudioSpace == minBlockSize)
                 {
                     // Audio buffer is overfull
-                    if (m_audio_buffer.isEnoughWriteSpace(necAudioSpace) == false)
+                    if (space_audio_size < necAudioSpace)
                     {
                         // fprintf (stdout, "Audio buffer is overfull\n");
                         necAudioSpace = m_audio_buffer.size() / 2;
@@ -432,13 +433,13 @@ FFmpegLibAvStreamImpl::run()
                 else
                 {
                     // Big part of audio-buffer is empty. Now it may be forced to overfull
-                    if (m_audio_buffer.isEnoughWriteSpace(necAudioSpace)) 
+                    if (space_audio_size > necAudioSpace)
                     {
-                        //fprintf (stdout, "Audio buffer forced to overfull\n");
+                        // fprintf (stdout, "Audio buffer forced to overfull\n");
                         necAudioSpace = minBlockSize;
                     }
                 }
-                if (m_audio_buffer.isEnoughWriteSpace(necAudioSpace) && m_audio_buffering_finished == false)
+                if (space_audio_size > necAudioSpace && m_audio_buffering_finished == false)
                 {
                     const int bytesread = FFmpegWrapper::getAudioSamples(m_audioIndex,
                                                                             123456789,

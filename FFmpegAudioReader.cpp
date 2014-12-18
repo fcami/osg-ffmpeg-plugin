@@ -143,7 +143,7 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
 {
     AVCodecContext *pCodecCtx   = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
 #if LIBAVCODEC_VERSION_MAJOR >= 56
-    AVFrame *       frame = av_frame_alloc();
+    AVFrame *       frame = OSG_ALLOC_FRAME();
     if (!frame)
         return -1;
 
@@ -289,7 +289,6 @@ FFmpegAudioReader::GetNextFrame(double & currTime, int16_t * output_buffer, unsi
 {
     int             bytesDecoded;
 	int             buffer_size         = AVCODEC_MAX_AUDIO_FRAME_SIZE;
-	AVCodecContext *pCodecCtx           = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
     //
     // First time we're called, set m_packet.data to NULL to indicate it
     // doesn't have to be freed

@@ -139,8 +139,8 @@ FFmpegVideoReader::openFile(const char *filename,
 	}
 
 	m_fmt_ctx_ptr = fmt_ctx;
-	m_pSeekFrame = avcodec_alloc_frame();
-    m_pSrcFrame = avcodec_alloc_frame();
+	m_pSeekFrame = OSG_ALLOC_FRAME();
+    m_pSrcFrame = OSG_ALLOC_FRAME();
 	//
     if (scaledWidth > 0)
     {
@@ -534,7 +534,7 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec)
     unsigned long       packetPos;
     int                 rezValue    = -1;
     AVCodecContext *    pCodecCtx   = m_fmt_ctx_ptr->streams[m_videoStreamIndex]->codec;
-    AVFrame *           pFrameRGB   = avcodec_alloc_frame();
+    AVFrame *           pFrameRGB   = OSG_ALLOC_FRAME();
     if(pFrameRGB == NULL)
     {
         return -1;
@@ -674,7 +674,7 @@ FFmpegVideoReader::seek(int64_t timestamp, unsigned char * ptrRGBmap)
             //
             //
             const int   rgbFrameSize    = avpicture_get_size(m_pixelFormat, m_new_width, m_new_height);
-            AVFrame *   pFrameRGB       = avcodec_alloc_frame();
+            AVFrame *   pFrameRGB       = OSG_ALLOC_FRAME();
             if(pFrameRGB==NULL)
                 return -1;
             // Determine required buffer size and allocate buffer

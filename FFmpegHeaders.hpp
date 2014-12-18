@@ -56,6 +56,12 @@ extern "C"
    #define AV_CODEC_ID_NONE CODEC_ID_NONE
 #endif
 
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+#define OSG_ALLOC_FRAME     av_frame_alloc
+#else
+#define OSG_ALLOC_FRAME     avcodec_alloc_frame
+#endif
+
 }
 
 class FormatContextPtr

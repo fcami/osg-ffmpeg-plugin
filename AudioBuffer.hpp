@@ -38,7 +38,7 @@ public:
     // The only way to modify \m_endIndicator
     const int           write (const unsigned char * buffer, const int & bytesNb);
 
-    const bool          isEnoughWriteSpace(const int & bytesNb) const;
+    const unsigned int  freeSpaceSize() const;
     const unsigned int  size() const;
 };
 
