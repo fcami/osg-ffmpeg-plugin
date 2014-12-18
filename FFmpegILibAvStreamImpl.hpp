@@ -32,8 +32,8 @@ public:
     virtual const bool              isHasAudio() const = 0;
     virtual void                    setAudioVolume(const float &) = 0;
     virtual const float             getAudioVolume() const = 0;
+    virtual void                    GetAudio(void * buffer, int bytesLength) = 0;
     // Return audio playback time in ms
-    virtual const unsigned long     GetAudio(void * buffer, int bytesLength) = 0;
     virtual const unsigned long     GetAudioPlaybackTime() const = 0;
     //
     /*

@@ -28,7 +28,7 @@ private:
     AudioFormat                     m_audioFormat;
     const unsigned char             m_AudioBufferTimeSec;
     AudioBuffer                     m_audio_buffer;
-    unsigned long                   m_ellapsedAudioMS;
+    unsigned long                   m_ellapsedAudioMicroSec;
     unsigned long                   m_audioDelay_ms;
     volatile bool                   m_audio_buffering_finished;
     //
@@ -66,7 +66,7 @@ public:
     virtual const bool              isHasAudio() const;
     virtual void                    setAudioVolume(const float &);
     virtual const float             getAudioVolume() const;
-    virtual const unsigned long     GetAudio(void * buffer, int bytesLength);
+    virtual void                    GetAudio(void * buffer, int bytesLength);
     virtual const unsigned long     GetAudioPlaybackTime() const;
     //
     /*

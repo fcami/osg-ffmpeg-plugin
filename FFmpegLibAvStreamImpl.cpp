@@ -9,7 +9,7 @@ namespace osgFFmpeg
 
 FFmpegLibAvStreamImpl::FFmpegLibAvStreamImpl()
 :m_AudioBufferTimeSec(6),
-m_ellapsedAudioMS(0),
+m_ellapsedAudioMicroSec(0),
 m_loop(false),
 m_pPlayer(NULL)
 {
@@ -120,7 +120,7 @@ FFmpegLibAvStreamImpl::GetAudioPlaybackTime() const
     if (m_audio_buffering_finished == true)
         return std::numeric_limits<unsigned long>::max();
 
-    return (m_ellapsedAudioMS < m_audioDelay_ms) ? 0 : m_ellapsedAudioMS - m_audioDelay_ms;
+    return (m_ellapsedAudioMicroSec < m_audioDelay_ms * 1000) ? 0 : (m_ellapsedAudioMicroSec - m_audioDelay_ms*1000)/1000;
 }
 
 void
@@ -145,7 +145,7 @@ FFmpegLibAvStreamImpl::Stop()
     stopShadowThread();
     //
     m_playerTimer.Reset();
-    m_ellapsedAudioMS = 0;
+    m_ellapsedAudioMicroSec = 0;
 }
 
 void
@@ -154,7 +154,7 @@ FFmpegLibAvStreamImpl::Seek(const unsigned long & newTimeMS)
     m_isNeedFlushBuffers = true;
     m_playerTimer.Reset();
     m_playerTimer.ElapsedMilliseconds (newTimeMS);
-    m_ellapsedAudioMS = newTimeMS;
+    m_ellapsedAudioMicroSec = newTimeMS * 1000;
 }
 
 const unsigned long
@@ -188,7 +188,7 @@ FFmpegLibAvStreamImpl::isHasAudio() const
     return m_audioIndex >= 0;
 }
 
-const unsigned long
+void
 FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
 {
     const unsigned long     playbackBytes = m_audio_buffer.read (buffer, bytesLength);
@@ -201,15 +201,13 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
     if (m_audio_buffer.isEnoughWriteSpace (m_audio_buffer.size() / 2))
         m_threadLocker.signal();
 
-    m_ellapsedAudioMS += playbackSec * 1000.0;
+    m_ellapsedAudioMicroSec += playbackSec * 1000000.0;
     //
     // Important:
     //
     // Even text output will stuck audio playback thread
     //
-    // fprintf (stdout, "m_ellapsedAudioMS = %d\n", m_ellapsedAudioMS);
-    //
-    return m_ellapsedAudioMS;
+    // fprintf (stdout, "m_ellapsedAudioMicroSec = %d\n", m_ellapsedAudioMicroSec);
 }
 
 int
@@ -278,7 +276,7 @@ void
 FFmpegLibAvStreamImpl::preRun()
 {
     const unsigned long elapsedTimeMS = m_playerTimer.ElapsedMilliseconds ();
-    m_ellapsedAudioMS = 0;
+    m_ellapsedAudioMicroSec = 0;
 
     //
     // Prepare Audio to streaming
@@ -289,7 +287,7 @@ FFmpegLibAvStreamImpl::preRun()
     {
         if (m_audio_sink.valid())
         {
-            m_ellapsedAudioMS = elapsedTimeMS;
+            m_ellapsedAudioMicroSec = elapsedTimeMS * 1000;
         
             if (m_isNeedFlushBuffers == true)
             {
@@ -345,8 +343,8 @@ FFmpegLibAvStreamImpl::postRun()
     if (isHasAudio() && m_audio_sink.valid())
     {
         m_playerTimer.Reset();
-        m_playerTimer.ElapsedMilliseconds (m_ellapsedAudioMS);
-        m_ellapsedAudioMS = 0;
+        m_playerTimer.ElapsedMilliseconds (m_ellapsedAudioMicroSec / 1000.0);
+        m_ellapsedAudioMicroSec = 0;
     }
     //
     // If streams finished, reset pointer to start position
@@ -358,7 +356,7 @@ FFmpegLibAvStreamImpl::postRun()
         //
         m_playerTimer.Reset();
         m_playerTimer.ElapsedMilliseconds (0);
-        m_ellapsedAudioMS = 0;
+        m_ellapsedAudioMicroSec = 0;
         
         if (m_pPlayer)
         {
