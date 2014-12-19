@@ -147,8 +147,181 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
 	}
 
 	m_fmt_ctx_ptr = fmt_ctx;
+    //
+    // Detect - is it source audio format planar?
+    //
+    m_isSrcAudioPlanar = false;
+    {
+        AVCodecContext *pCodecCtx   = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
+
+#ifdef OSG_ABLE_PLANAR_AUDIO
+        if (av_sample_fmt_is_planar(pCodecCtx->sample_fmt) != 0)
+            m_isSrcAudioPlanar = true;
+#else // OSG_ABLE_PLANAR_AUDIO
+        if (pCodecCtx->sample_fmt > AV_SAMPLE_FMT_DBL &&
+            pCodecCtx->sample_fmt != AV_SAMPLE_FMT_NB)
+        {
+            fprintf (stdout, "It seams that source audio sample format is planar, but used version of libavutil does not support it\n");
+            m_isSrcAudioPlanar = true;
+        }
+#endif // OSG_ABLE_PLANAR_AUDIO
+    }
+    //
+    // Define output sample format
+    //
+    m_outSampleFormat = pCodecCtx->sample_fmt;
+    if (m_isSrcAudioPlanar)
+    {
+#ifdef OSG_ABLE_PLANAR_AUDIO
+        // Set \m_outSampleFormat according to type of converting data in \dePlaneAudio()
+        switch (pCodecCtx->sample_fmt)
+        {
+            case AV_SAMPLE_FMT_U8P:
+                {
+                    m_outSampleFormat = AV_SAMPLE_FMT_U8;
+                    break;
+                }
+            case AV_SAMPLE_FMT_S16P:
+                {
+                    m_outSampleFormat = AV_SAMPLE_FMT_S16;
+                    break;
+                }
+            case AV_SAMPLE_FMT_S32P:
+                {
+                    m_outSampleFormat = AV_SAMPLE_FMT_S32;
+                    break;
+                }
+            case AV_SAMPLE_FMT_FLTP:
+                {
+                    m_outSampleFormat = AV_SAMPLE_FMT_FLT;
+                    break;
+                }
+            case AV_SAMPLE_FMT_DBLP:
+                {
+                    m_outSampleFormat = AV_SAMPLE_FMT_DBL;
+                    break;
+                }
+            default:
+                {
+                    fprintf (stdout, "Unsupported of plane audio sample format\n");
+                    break;
+                }
+        };
+#endif // OSG_ABLE_PLANAR_AUDIO
+    }
+    
 	//
 	return 0;
+}
+
+const bool
+FFmpegAudioReader::isAudioPlanar () const
+{
+    return m_isSrcAudioPlanar;
+}
+
+// Audio should be planar
+const int
+FFmpegAudioReader::dePlaneAudio (const int & nb_samples, AVCodecContext * pCodecCtx, uint8_t **src_data)
+{
+    if (isAudioPlanar() == false)
+        return -1;
+
+#ifdef OSG_ABLE_PLANAR_AUDIO
+    const int   plane_size  = calc_samples_get_buffer_size (nb_samples, pCodecCtx) / pCodecCtx->channels;
+    //
+    // Convert data according to format which set to \m_outSampleFormat
+    //
+    size_t      write_p = 0;
+    size_t      nb;
+    int         ch;
+    switch (pCodecCtx->sample_fmt)
+    {
+    case AV_SAMPLE_FMT_U8P: // to AV_SAMPLE_FMT_U8
+        {
+            uint8_t *       out = (uint8_t *)m_decode_buffer;
+            const size_t    nbmax = plane_size/sizeof(uint8_t);
+            for (nb = 0; nb < nbmax; ++nb)
+            {
+                for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                {
+                    out[write_p] = ((uint8_t *) src_data[ch])[nb];
+                    ++write_p;
+                }
+            }
+            break;
+        }
+    case AV_SAMPLE_FMT_S16P: // to AV_SAMPLE_FMT_S16
+        {
+            int16_t *       out = (int16_t *)m_decode_buffer;
+            const size_t    nbmax = plane_size/sizeof(int16_t);
+            for (nb = 0; nb < nbmax; ++nb)
+            {
+                for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                {
+                    out[write_p] = ((int16_t *) src_data[ch])[nb];
+                    ++write_p;
+                }
+            }
+            break;
+        }
+    case AV_SAMPLE_FMT_S32P: // to AV_SAMPLE_FMT_S32
+        {
+            int32_t *       out = (int32_t *)m_decode_buffer;
+            const size_t    nbmax = plane_size/sizeof(int32_t);
+            for (nb = 0; nb < nbmax; ++nb)
+            {
+                for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                {
+                    out[write_p] = ((int32_t *) src_data[ch])[nb];
+                    ++write_p;
+                }
+            }
+            break;
+        }
+    case AV_SAMPLE_FMT_FLTP: // to AV_SAMPLE_FMT_FLT
+        {
+            float *         out = (float *)m_decode_buffer;
+            const size_t    nbmax = plane_size/sizeof(float);
+            for (nb = 0; nb < nbmax; ++nb)
+            {
+                for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                {
+                    out[write_p] = ((float *) src_data[ch])[nb];
+                    ++write_p;
+                }
+            }
+            break;
+        }
+    case AV_SAMPLE_FMT_DBLP: // to AV_SAMPLE_FMT_DBL
+        {
+            double *        out = (double *)m_decode_buffer;
+            const size_t    nbmax = plane_size/sizeof(double);
+            for (nb = 0; nb < nbmax; ++nb)
+            {
+                for (ch = 0; ch < pCodecCtx->channels; ++ch)
+                {
+                    out[write_p] = ((double *) src_data[ch])[nb];
+                    ++write_p;
+                }
+            }
+            break;
+        }
+    };
+    return 0;
+#endif // OSG_ABLE_PLANAR_AUDIO
+    return -1;
+}
+
+const int
+FFmpegAudioReader::calc_samples_get_buffer_size(const int & nb_samples, AVCodecContext * pCodecCtx)
+{
+#ifdef OSG_ABLE_PLANAR_AUDIO
+    int         plane_size;
+    return av_samples_get_buffer_size ( & plane_size, pCodecCtx->channels, nb_samples, pCodecCtx->sample_fmt, 1);
+#else // OSG_ABLE_PLANAR_AUDIO
+    return nb_samples * av_get_bytes_per_sample(pCodecCtx->sample_fmt) * pCodecCtx->channels;
+#endif // OSG_ABLE_PLANAR_AUDIO
 }
 
 const int
@@ -167,11 +340,9 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
         result      = avcodec_decode_audio4 (pCodecCtx, frame, & got_frame, & m_packet);
     } while (result == AVERROR(EAGAIN) || !got_frame);
 
-    if (result >= 0 && got_frame)
+    if (result >= 0 && got_frame) // if no errors
     {
-        int         plane_size;
-        const int   planar      = av_sample_fmt_is_planar(pCodecCtx->sample_fmt);
-        const int   data_size   = av_samples_get_buffer_size (&plane_size, pCodecCtx->channels, frame->nb_samples, pCodecCtx->sample_fmt, 1);
+        const int   data_size   = calc_samples_get_buffer_size(frame->nb_samples, pCodecCtx);
         if (buffer_size < data_size)
         {
             av_log(pCodecCtx, AV_LOG_ERROR, "output buffer size is too small for "
@@ -182,88 +353,9 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
         //
         // Resample planar/nonplanar audio
         //
-        if (planar != 0)
+        if (isAudioPlanar())
         {
-            //
-            // Convert data according to format which obtained by
-            // av_get_packed_sample_fmt (pCodecCtx->sample_fmt);
-            //
-            size_t      write_p = 0;
-            size_t      nb;
-            int         ch;
-            switch (pCodecCtx->sample_fmt)
-            {
-            case AV_SAMPLE_FMT_U8P: // to AV_SAMPLE_FMT_U8
-                {
-                    uint8_t *       out = (uint8_t *)m_decode_buffer;
-                    const size_t    nbmax = plane_size/sizeof(uint8_t);
-                    for (nb = 0; nb < nbmax; ++nb)
-                    {
-                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
-                        {
-                            out[write_p] = ((uint8_t *) frame->extended_data[ch])[nb];
-                            ++write_p;
-                        }
-                    }
-                    break;
-                }
-            case AV_SAMPLE_FMT_S16P: // to AV_SAMPLE_FMT_S16
-                {
-                    int16_t *       out = (int16_t *)m_decode_buffer;
-                    const size_t    nbmax = plane_size/sizeof(int16_t);
-                    for (nb = 0; nb < nbmax; ++nb)
-                    {
-                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
-                        {
-                            out[write_p] = ((int16_t *) frame->extended_data[ch])[nb];
-                            ++write_p;
-                        }
-                    }
-                    break;
-                }
-            case AV_SAMPLE_FMT_S32P: // to AV_SAMPLE_FMT_S32
-                {
-                    int32_t *       out = (int32_t *)m_decode_buffer;
-                    const size_t    nbmax = plane_size/sizeof(int32_t);
-                    for (nb = 0; nb < nbmax; ++nb)
-                    {
-                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
-                        {
-                            out[write_p] = ((int32_t *) frame->extended_data[ch])[nb];
-                            ++write_p;
-                        }
-                    }
-                    break;
-                }
-            case AV_SAMPLE_FMT_FLTP: // to AV_SAMPLE_FMT_FLT
-                {
-                    float *         out = (float *)m_decode_buffer;
-                    const size_t    nbmax = plane_size/sizeof(float);
-                    for (nb = 0; nb < nbmax; ++nb)
-                    {
-                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
-                        {
-                            out[write_p] = ((float *) frame->extended_data[ch])[nb];
-                            ++write_p;
-                        }
-                    }
-                    break;
-                }
-            case AV_SAMPLE_FMT_DBLP: // to AV_SAMPLE_FMT_DBL
-                {
-                    double *        out = (double *)m_decode_buffer;
-                    const size_t    nbmax = plane_size/sizeof(double);
-                    for (nb = 0; nb < nbmax; ++nb)
-                    {
-                        for (ch = 0; ch < pCodecCtx->channels; ++ch)
-                        {
-                            out[write_p] = ((double *) frame->extended_data[ch])[nb];
-                            ++write_p;
-                        }
-                    }
-                    break;
-                }
-            };
+            dePlaneAudio (frame->nb_samples, pCodecCtx, frame->extended_data);
         }
         else
         {
@@ -282,11 +374,41 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
 #elif LIBAVCODEC_VERSION_MAJOR >= 53 || (LIBAVCODEC_VERSION_MAJOR==52 && LIBAVCODEC_VERSION_MINOR>=32)
     int loc_buffer_size;
     int ret_value;
-    do
+    //
+    if (isAudioPlanar())
     {
-        loc_buffer_size = buffer_size; // value should be defined before
-        ret_value = avcodec_decode_audio3(pCodecCtx, (int16_t*)m_decode_buffer, & loc_buffer_size, & m_packet);
-    } while (!loc_buffer_size);
+#ifdef OSG_ABLE_PLANAR_AUDIO
+        do
+        {
+            loc_buffer_size = buffer_size; // value should be defined before calling \avcodec_decode_audio3()
+            ret_value = avcodec_decode_audio3(pCodecCtx, (int16_t*)m_decode_panar_buffer, & loc_buffer_size, & m_packet);
+        } while (!loc_buffer_size);
+        //
+        if (ret_value > 0) // if no error
+        {
+            uint8_t *       ptrArray[128];
+            uint8_t *       ptr = (uint8_t*) & m_decode_panar_buffer[0];
+            const size_t    samples_nb = loc_buffer_size / pCodecCtx->channels;
+            for (int i = 0; i < pCodecCtx->channels; ++i)
+            {
+                ptrArray[i] = ptr;
+                ptr += samples_nb;
+            }
+            dePlaneAudio (samples_nb, pCodecCtx, ptrArray);
+        }
+#else // OSG_ABLE_PLANAR_AUDIO
+        fprintf (stdout, "ERROR: decoded audio is planar but used version of libavutil does not support it\n");
+        return -1;
+#endif // OSG_ABLE_PLANAR_AUDIO
+    }
+    else
+    {
+        do
+        {
+            loc_buffer_size = buffer_size; // value should be defined before
+            ret_value = avcodec_decode_audio3(pCodecCtx, (int16_t*)m_decode_buffer, & loc_buffer_size, & m_packet);
+        } while (!loc_buffer_size);
+    }
     buffer_size = loc_buffer_size;
     return ret_value;
 #else
@@ -453,21 +575,9 @@ FFmpegAudioReader::getChannels(void) const
 const AVSampleFormat
 FFmpegAudioReader::getSampleFormat(void) const
 {
-    AVSampleFormat  result;
-
-    AVCodecContext *pCodecCtx = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
-    result = pCodecCtx->sample_fmt;
-
-#if LIBAVCODEC_VERSION_MAJOR >= 54
-    const int planar        = av_sample_fmt_is_planar(pCodecCtx->sample_fmt);
-    if (planar != 0)
-    {
-        result = av_get_packed_sample_fmt (pCodecCtx->sample_fmt);
-    }
-#endif
-
-    return result;
+    return m_outSampleFormat;
 }
+
 const int
 FFmpegAudioReader::getSampleSizeInBytes(void) const
 {

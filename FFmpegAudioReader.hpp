@@ -25,16 +25,24 @@ private:
     unsigned long	        m_output_buffer_length_prev;
     unsigned int		    m_reader_buffer_shift;
     int8_t                  m_decode_buffer[AVCODEC_MAX_AUDIO_FRAME_SIZE];
+#ifdef OSG_ABLE_PLANAR_AUDIO
+    int8_t                  m_decode_panar_buffer[AVCODEC_MAX_AUDIO_FRAME_SIZE];
+#endif
     //
     AVFormatContext *       m_fmt_ctx_ptr;
     short                   m_audioStreamIndex;
     bool                    m_FirstFrame;
     int                     m_bytesRemaining;
     AVPacket         	    m_packet;
+    bool                    m_isSrcAudioPlanar;
+    AVSampleFormat          m_outSampleFormat;
 
     static const int        guessLayoutByChannelsNb(const int & chNb);
+    static const int        calc_samples_get_buffer_size(const int & nb_samples, AVCodecContext * pCodecCtx);
     void                    release_params_getSample(void);
     const int               decodeAudio(int & buffer_size);
+    const bool              isAudioPlanar () const;
+    const int               dePlaneAudio (const int & nb_samples, AVCodecContext * pCodecCtx, uint8_t **src_data);
     bool                    GetNextFrame(double & currTime, int16_t * output_buffer, unsigned int & output_buffer_size);
 public:
     const int               openFile(const char *filename, FFmpegParameters * parameters);

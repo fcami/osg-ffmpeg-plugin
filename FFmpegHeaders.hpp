@@ -36,6 +36,9 @@ extern "C"
 #define AV_SAMPLE_FMT_NB   SAMPLE_FMT_NB
 #endif
 
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(51,73,101)
+#define OSG_ABLE_PLANAR_AUDIO
+#endif
 
 // Changes for FFMpeg version greater than 0.6
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(52, 64, 0)
