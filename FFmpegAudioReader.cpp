@@ -71,24 +71,33 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
 
 	if ((err = avformat_open_input(&fmt_ctx, filename, iformat, &format_opts)) < 0)
 	{
-		fprintf(stderr, "Cannot open file %s for audio\n", filename);
+        OSG_NOTICE << "Cannot open file " << filename << " for audio" << std::endl;
+
 		return err;
 	}
     //
     // Retrieve stream info
     // Only buffer up to one and a half seconds
     //
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+    fmt_ctx->max_analyze_duration2 = AV_TIME_BASE * 1.5f;
+#else
     fmt_ctx->max_analyze_duration = AV_TIME_BASE * 1.5f;
-	// fill the streams in the format context
+#endif
+    //
+    // fill the streams in the format context
+#if LIBAVFORMAT_VERSION_MAJOR >= 54
 	if ((err = avformat_find_stream_info(fmt_ctx, NULL)) < 0)
-	{
 		return err;
-	}
+#else
+	if ((err = av_find_stream_info(fmt_ctx)) < 0)
+		return err;
+#endif
     av_dump_format(fmt_ctx, 0, filename, 0);
     //
 	// To find the first audio stream.
     //
-	for (i = 0; i < fmt_ctx->nb_streams; i++)
+	for (i = 0; i < (int)fmt_ctx->nb_streams; i++)
 	{
 		if (fmt_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO)
 		{
@@ -127,9 +136,13 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
     **/
     pCodecCtx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
     pCodecCtx->thread_count = 1;
+#if LIBAVCODEC_VERSION_MAJOR >= 54
 	if (avcodec_open2 (pCodecCtx, codec, NULL) < 0)
+#else
+	if (avcodec_open (pCodecCtx, codec) < 0)
+#endif
 	{
-        fprintf(stderr, "Could not open the required codec\n");
+        fprintf(stderr, "Could not open the required codec for audio\n");
 	    return -1;
 	}
 
@@ -142,7 +155,7 @@ const int
 FFmpegAudioReader::decodeAudio (int & buffer_size)
 {
     AVCodecContext *pCodecCtx   = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
-#if LIBAVCODEC_VERSION_MAJOR >= 56
+#if LIBAVCODEC_VERSION_MAJOR >= 54
     AVFrame *       frame = OSG_ALLOC_FRAME();
     if (!frame)
         return -1;
@@ -163,7 +176,7 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
         {
             av_log(pCodecCtx, AV_LOG_ERROR, "output buffer size is too small for "
             "the current frame (%d < %d)\n", buffer_size, data_size);
-            av_frame_free (& frame);
+            OSG_FREE_FRAME (& frame);
             return -1;
         }
         //
@@ -263,12 +276,10 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
         buffer_size = 0;
     }
 
-    av_frame_free (& frame);
+    OSG_FREE_FRAME (& frame);
 
     return result;
 #elif LIBAVCODEC_VERSION_MAJOR >= 53 || (LIBAVCODEC_VERSION_MAJOR==52 && LIBAVCODEC_VERSION_MINOR>=32)
-    // following code segment copied from ffmpeg's avcodec_decode_audio2()
-    // implementation to avoid warnings about deprecated function usage.
     int loc_buffer_size;
     int ret_value;
     do
@@ -279,8 +290,17 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
     buffer_size = loc_buffer_size;
     return ret_value;
 #else
-    // fallback for older versions of ffmpeg that don't have avcodec_decode_audio3.
-    return avcodec_decode_audio2(pCodecCtx, (int16_t*)m_decode_buffer, & buffer_size, m_packet.data, m_packet.size);
+    //
+    int loc_buffer_size;
+    int ret_value;
+    do
+    {
+        loc_buffer_size = buffer_size;
+        // Returns negative value if error,
+        // otherwise the number of bytes used or zero if no frame could be decompressed.
+        ret_value = avcodec_decode_audio2(pCodecCtx, (int16_t*)m_decode_buffer, & loc_buffer_size, m_packet.data, m_packet.size);
+    } while (ret_value == 0);
+    return ret_value;
 #endif
 }
 
@@ -399,7 +419,12 @@ FFmpegAudioReader::seek(int64_t timestamp)
 
     //
     // For some AC3-audio seek by AVSEEK_FLAG_BACKWARD returns WRONG values.
-    int seekVal = av_seek_frame(m_fmt_ctx_ptr, m_audioStreamIndex, seek_target, AVSEEK_FLAG_ANY);
+    const int seekVal = av_seek_frame(m_fmt_ctx_ptr, m_audioStreamIndex, seek_target, AVSEEK_FLAG_ANY);
+    if (seekVal < 0)
+    {
+        fprintf (stderr, "Cannot seek audio frame\n");
+        return -1;
+    }
 
 	return 0;
 }
@@ -433,7 +458,7 @@ FFmpegAudioReader::getSampleFormat(void) const
     AVCodecContext *pCodecCtx = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
     result = pCodecCtx->sample_fmt;
 
-#if LIBAVCODEC_VERSION_MAJOR >= 56
+#if LIBAVCODEC_VERSION_MAJOR >= 54
     const int planar        = av_sample_fmt_is_planar(pCodecCtx->sample_fmt);
     if (planar != 0)
     {
@@ -546,12 +571,14 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
     }
 
     //
-    AVCodecContext *        pCodecCtx               = input_audio->m_fmt_ctx_ptr->streams[input_audio->m_audioStreamIndex]->codec;
     const int       		input_FrameRate         = input_audio->getFrameRate();
     const int				input_Channels          = input_audio->getChannels();
     //
     unsigned int    		output_buffer_size;
     double  				input_currTime;
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+    AVCodecContext *        pCodecCtx               = input_audio->m_fmt_ctx_ptr->streams[input_audio->m_audioStreamIndex]->codec;
+#endif
 	//
 	// Calculate required buffer-size [input_buffer_size] for DECODER
 	//

@@ -56,10 +56,16 @@ extern "C"
    #define AV_CODEC_ID_NONE CODEC_ID_NONE
 #endif
 
-#if LIBAVCODEC_VERSION_MAJOR >= 56
-#define OSG_ALLOC_FRAME     av_frame_alloc
+#if LIBAVCODEC_VERSION_MAJOR >= 55
+    #define OSG_ALLOC_FRAME     av_frame_alloc
+    #define OSG_FREE_FRAME      av_frame_free
 #else
-#define OSG_ALLOC_FRAME     avcodec_alloc_frame
+    #define OSG_ALLOC_FRAME     avcodec_alloc_frame
+    #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(54, 59, 100)
+        #define OSG_FREE_FRAME      avcodec_free_frame
+    #else
+        #define OSG_FREE_FRAME      av_freep
+    #endif
 #endif
 
 }

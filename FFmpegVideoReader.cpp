@@ -74,26 +74,32 @@ FFmpegVideoReader::openFile(const char *filename,
     }
 	if ((err = avformat_open_input(&fmt_ctx, filename, iformat, &format_opts)) < 0)
 	{
-		fprintf(stderr, "Cannot open file %s for video\n", filename);
+        OSG_NOTICE << "Cannot open file " << filename << " for video" << std::endl;
 		return err;
 	}
     //
     // Retrieve stream info
     // Only buffer up to one and a half seconds
     //
+#if LIBAVFORMAT_VERSION_MAJOR >= 56
+    fmt_ctx->max_analyze_duration2 = AV_TIME_BASE * 1.5f;
+#else
     fmt_ctx->max_analyze_duration = AV_TIME_BASE * 1.5f;
-	/* fill the streams in the format context */
+#endif
+	// fill the streams in the format context
+#if LIBAVFORMAT_VERSION_MAJOR >= 54
 	if ((err = avformat_find_stream_info(fmt_ctx, NULL)) < 0)
-	{
-		fprintf(stderr, "%s\n", err);
 		return err;
-	}
+#else
+	if ((err = av_find_stream_info(fmt_ctx)) < 0)
+		return err;
+#endif
 
 	av_dump_format(fmt_ctx, 0, filename, 0);
     //
 	// To find the first video stream.
     //
-	for (i = 0; i < fmt_ctx->nb_streams; i++)
+	for (i = 0; i < (int)fmt_ctx->nb_streams; i++)
 	{
 		if (fmt_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
 		{
@@ -132,9 +138,13 @@ FFmpegVideoReader::openFile(const char *filename,
     pCodecCtx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
     pCodecCtx->thread_count = 1;
     //
-	if (avcodec_open2(pCodecCtx, codec, NULL) < 0)
+#if LIBAVCODEC_VERSION_MAJOR >= 54
+	if (avcodec_open2 (pCodecCtx, codec, NULL) < 0)
+#else
+	if (avcodec_open (pCodecCtx, codec) < 0)
+#endif
 	{
-        fprintf(stderr, "Could not open the required codec\n");
+        fprintf(stderr, "Could not open the required codec for video\n");
 	    return -1;
 	}
 
@@ -192,12 +202,12 @@ FFmpegVideoReader::close(void)
     }
 	if (m_pSeekFrame)
 	{
-		av_freep(& m_pSeekFrame);
+		OSG_FREE_FRAME (& m_pSeekFrame);
 		m_pSeekFrame = NULL;
 	}
     if (m_pSrcFrame)
     {
-        av_freep(& m_pSrcFrame);
+        OSG_FREE_FRAME (& m_pSrcFrame);
         m_pSrcFrame = NULL;
     }
 #ifdef USE_SWSCALE    
@@ -556,7 +566,7 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec)
                                             SWS_OSG_CONVERSION_TYPE, NULL, NULL, NULL);
             if(img_convert_ctx == NULL)
             {
-                av_free(pFrameRGB);
+                OSG_FREE_FRAME  (& pFrameRGB);
 
                 fprintf(stderr, "Cannot initialize the video conversion context\n");
                 return -1;
@@ -575,7 +585,7 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec)
         rezValue = 0;
     }
     //
-    av_free(pFrameRGB);
+    OSG_FREE_FRAME  (& pFrameRGB);
 
     return rezValue;
 }
@@ -695,7 +705,7 @@ FFmpegVideoReader::seek(int64_t timestamp, unsigned char * ptrRGBmap)
                 if(img_convert_ctx == NULL)
                 {
                     av_free(buffer);
-                    av_free(pFrameRGB);
+                    OSG_FREE_FRAME (& pFrameRGB);
 
                     fprintf(stderr, "Cannot initialize the video conversion context!\n");
                     return -1;
@@ -714,7 +724,7 @@ FFmpegVideoReader::seek(int64_t timestamp, unsigned char * ptrRGBmap)
             //
             //
             av_free(buffer);
-            av_free(pFrameRGB);
+            OSG_FREE_FRAME (& pFrameRGB);
 
             ret = 0;
         }

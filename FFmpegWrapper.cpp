@@ -55,15 +55,16 @@ FFmpegWrapper::openVideo(const char * pFileName,
 		}
 		else
 		{
-			delete media;
-            OSG_NOTICE << "Cannot open file " << pFileName << std::endl;
+            // Message notified before
 		}
 	}
 	catch (...)
 	{
-		delete media;
 		ret_falue = -1;
 	}
+
+    if (ret_falue < 0)
+		delete media;
 
     return ret_falue;
 }
@@ -275,13 +276,17 @@ FFmpegWrapper::openAudio(const char * pFileName, FFmpegParameters * parameters)
 		}
 		else
 		{
-            OSG_NOTICE << "Cannot open file " << pFileName << std::endl;
+            // Message notified before
 		}
 	}
 	catch (...)
 	{
 		ret_falue = -2;
 	}
+
+    if (ret_falue < 0)
+        delete media;
+
     return ret_falue;
 }
 

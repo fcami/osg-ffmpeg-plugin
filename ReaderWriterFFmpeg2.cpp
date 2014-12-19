@@ -116,13 +116,21 @@ public:
         // Register all FFmpeg formats/codecs
         av_register_all();
 
+#if LIBAVFORMAT_VERSION_MAJOR >= 54
         avformat_network_init();
+#else
+        OSG_NOTICE << "This ver of libavformat does not support avformat_network_init()" << std::endl;
+#endif
     }
 
     virtual ~ReaderWriterFFmpeg2()
     {
 		// Undo the initialization done by avformat_network_init.
-		avformat_network_deinit();
+#if LIBAVFORMAT_VERSION_MAJOR >= 54
+        avformat_network_deinit();
+#else
+        OSG_NOTICE << "This ver of libavformat does not support avformat_network_deinit()" << std::endl;
+#endif
     }
 
     virtual const char * className() const

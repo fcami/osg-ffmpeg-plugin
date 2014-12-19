@@ -396,17 +396,17 @@ FFmpegLibAvStreamImpl::run()
     preRun();
 
     const unsigned short    samplesPart = 32767; // do not change. This is restriction of ffmpeg-wrapper
-    const int               minBlockSize = samplesPart * m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb;
-    unsigned char *         pAudioData = minBlockSize > 0 ? new unsigned char[minBlockSize * 2] : NULL; // Because it could read more than minBlockSize
+    const unsigned int      minBlockSize = samplesPart * m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb;
+    unsigned char *         pAudioData = minBlockSize > 0 ? new unsigned char[minBlockSize * 2] : NULL; // ... * 2], because it could read more than minBlockSize
     try
     {
         m_shadowThreadStop = false;
         //
-        bool                    videoBufferFull;
-        bool                    audioBufferFull;
+        bool                videoBufferFull;
+        bool                audioBufferFull;
         //
-        bool    isPlaybackStarted = false;
-        int     necAudioSpace = minBlockSize; // may take only two valus: 1) minBlockSize 2) m_audio_buffer.size() / 2
+        bool                isPlaybackStarted   = false;
+        unsigned int        necAudioSpace       = minBlockSize; // may take only two valus: 1) minBlockSize 2) m_audio_buffer.size() / 2
         while (m_shadowThreadStop == false)
         {
             audioBufferFull = true;

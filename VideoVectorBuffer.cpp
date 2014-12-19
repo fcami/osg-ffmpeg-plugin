@@ -202,9 +202,10 @@ VideoVectorBuffer::GetFramePtr(const unsigned long & msTime, unsigned char *& pA
         // the buffer began be late is here
         //
         //
-#ifdef _DEBUG
+// todo: after test-phase, this #ifdef should be enabled
+//#ifdef _DEBUG
         fprintf(stdout, "Buffered time not found for %d ms\n", msTime);
-#endif // _DEBUG
+//#endif // _DEBUG
 
         return -1;
     }
