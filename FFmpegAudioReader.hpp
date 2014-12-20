@@ -16,14 +16,14 @@ class FFmpegAudioReader
 private:
     int16_t *               m_output_buffer;
     unsigned char           m_intermediate_channelsNb;
-#if LIBAVCODEC_VERSION_MAJOR >= 56
+#ifdef OSG_ABLE_SWRCONTEXT
     SwrContext *            m_audio_swr_cntx;
 #else
     ReSampleContext *       m_audio_resample_cntx;
     ReSampleContext *       m_audio_intermediate_resample_cntx;
 #endif
-    unsigned long	        m_output_buffer_length_prev;
-    unsigned int		    m_reader_buffer_shift;
+    unsigned long           m_output_buffer_length_prev;
+    unsigned int            m_reader_buffer_shift;
     int8_t                  m_decode_buffer[AVCODEC_MAX_AUDIO_FRAME_SIZE];
 #ifdef OSG_ABLE_PLANAR_AUDIO
     int8_t                  m_decode_panar_buffer[AVCODEC_MAX_AUDIO_FRAME_SIZE];
@@ -33,7 +33,7 @@ private:
     short                   m_audioStreamIndex;
     bool                    m_FirstFrame;
     int                     m_bytesRemaining;
-    AVPacket         	    m_packet;
+    AVPacket                m_packet;
     bool                    m_isSrcAudioPlanar;
     AVSampleFormat          m_outSampleFormat;
 
@@ -49,11 +49,11 @@ public:
     int                     seek(int64_t timestamp);
     void                    close(void);
 
-    const int   			getFrameRate(void) const;
-    const int				getChannels(void) const;
-    const AVSampleFormat	getSampleFormat(void) const;
+    const int               getFrameRate(void) const;
+    const int               getChannels(void) const;
+    const AVSampleFormat    getSampleFormat(void) const;
     const int               getSampleSizeInBytes(void) const;
-    const int				getFrameSize(void) const;
+    const int               getFrameSize(void) const;
     // max value for using for seek
     const int64_t           get_duration(void) const;
     static const int        getSamples(FFmpegAudioReader* media,

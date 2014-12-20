@@ -17,21 +17,21 @@ FFmpegVideoReader::openFile(const char *filename,
                             float & frame_rate,
                             bool & par_alphaChannel)
 {
-	int 				    err, i;
+    int                     err, i;
     AVInputFormat *         iformat     = NULL;
     AVDictionary *          format_opts = NULL;
-	AVFormatContext *       fmt_ctx     = NULL;
+    AVFormatContext *       fmt_ctx     = NULL;
     //
     //
     //
-	m_videoStreamIndex                  = -1;
-	m_FirstFrame                        = true;
-	img_convert_ctx                     = NULL;
-	m_pSeekFrame                        = NULL;
+    m_videoStreamIndex                  = -1;
+    m_FirstFrame                        = true;
+    img_convert_ctx                     = NULL;
+    m_pSeekFrame                        = NULL;
     m_pSrcFrame                         = NULL;
-	m_is_video_duration_determined      = 0;
-	m_video_duration                    = 0;
-	m_pixelFormat                       = (useRGB_notBGR == true) ? PIX_FMT_RGB24 : PIX_FMT_BGR24;
+    m_is_video_duration_determined      = 0;
+    m_video_duration                    = 0;
+    m_pixelFormat                       = (useRGB_notBGR == true) ? PIX_FMT_RGB24 : PIX_FMT_BGR24;
 
     if (std::string(filename).compare(0, 5, "/dev/")==0)
     {
@@ -72,47 +72,59 @@ FFmpegVideoReader::openFile(const char *filename,
             fmt_ctx->pb = context;
         }
     }
-	if ((err = avformat_open_input(&fmt_ctx, filename, iformat, &format_opts)) < 0)
-	{
+    if ((err = avformat_open_input(&fmt_ctx, filename, iformat, &format_opts)) < 0)
+    {
         OSG_NOTICE << "Cannot open file " << filename << " for video" << std::endl;
-		return err;
-	}
+        return err;
+    }
     //
     // Retrieve stream info
     // Only buffer up to one and a half seconds
     //
-#if LIBAVFORMAT_VERSION_MAJOR >= 56
+// see: https://ffmpeg.org/pipermail/ffmpeg-cvslog/2014-June/078216.html
+// "New field int64_t max_analyze_duration2 instead of deprecated int max_analyze_duration."
+#if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(55, 43, 100)
     fmt_ctx->max_analyze_duration2 = AV_TIME_BASE * 1.5f;
 #else
     fmt_ctx->max_analyze_duration = AV_TIME_BASE * 1.5f;
 #endif
-	// fill the streams in the format context
-#if LIBAVFORMAT_VERSION_MAJOR >= 54
-	if ((err = avformat_find_stream_info(fmt_ctx, NULL)) < 0)
-		return err;
+
+    // fill the streams in the format context
+// see: https://gitorious.org/ffmpeg/ffmpeg/commit/afe2726089a9f45d89e81217cd69505c14b94445
+// "add avformat_find_stream_info()"
+//??? not works: #if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(53, 2, 0)
+//
+// Answer: http://sourceforge.net/p/cmus/mailman/message/28014386/
+// "It seems ffmpeg development is completely mad, although their APIchanges file says 
+// avcodec_open2() is there from version 53.6.0 (and this is true for the git checkout),
+// they somehow managed to not include it in their official 0.8.2 release, which has
+// version 53.7.0 (!)."
+#if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(53, 5, 0)
+    if ((err = avformat_find_stream_info(fmt_ctx, NULL)) < 0)
+        return err;
 #else
-	if ((err = av_find_stream_info(fmt_ctx)) < 0)
-		return err;
+    if ((err = av_find_stream_info(fmt_ctx)) < 0)
+        return err;
 #endif
 
-	av_dump_format(fmt_ctx, 0, filename, 0);
+    av_dump_format(fmt_ctx, 0, filename, 0);
     //
-	// To find the first video stream.
+    // To find the first video stream.
     //
-	for (i = 0; i < (int)fmt_ctx->nb_streams; i++)
-	{
-		if (fmt_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
-		{
-			m_videoStreamIndex = i;
-			break;
-		}
-	}
-	if (m_videoStreamIndex < 0)
-	{
+    for (i = 0; i < (int)fmt_ctx->nb_streams; i++)
+    {
+        if (fmt_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+        {
+            m_videoStreamIndex = i;
+            break;
+        }
+    }
+    if (m_videoStreamIndex < 0)
+    {
         fprintf(stderr, "Opened file has not video-streams\n");
-	    return -1;
-	}
-	AVCodecContext *pCodecCtx = fmt_ctx->streams[m_videoStreamIndex]->codec;
+        return -1;
+    }
+    AVCodecContext *pCodecCtx = fmt_ctx->streams[m_videoStreamIndex]->codec;
     // Check stream sanity
     if (pCodecCtx->codec_id == AV_CODEC_ID_NONE)
     {
@@ -138,20 +150,29 @@ FFmpegVideoReader::openFile(const char *filename,
     pCodecCtx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
     pCodecCtx->thread_count = 1;
     //
-#if LIBAVCODEC_VERSION_MAJOR >= 54
-	if (avcodec_open2 (pCodecCtx, codec, NULL) < 0)
+// see: https://gitorious.org/libav/libav/commit/0b950fe240936fa48fd41204bcfd04f35bbf39c3
+// "introduce avcodec_open2() as a replacement for avcodec_open()."
+//??? not works: #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(53, 5, 0)
+//
+// Answer: http://sourceforge.net/p/cmus/mailman/message/28014386/
+// "It seems ffmpeg development is completely mad, although their APIchanges file says 
+// avcodec_open2() is there from version 53.6.0 (and this is true for the git checkout),
+// they somehow managed to not include it in their official 0.8.2 release, which has
+// version 53.7.0 (!)."
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(53, 8, 0)
+    if (avcodec_open2 (pCodecCtx, codec, NULL) < 0)
 #else
-	if (avcodec_open (pCodecCtx, codec) < 0)
+    if (avcodec_open (pCodecCtx, codec) < 0)
 #endif
-	{
+    {
         fprintf(stderr, "Could not open the required codec for video\n");
-	    return -1;
-	}
+        return -1;
+    }
 
-	m_fmt_ctx_ptr = fmt_ctx;
-	m_pSeekFrame = OSG_ALLOC_FRAME();
+    m_fmt_ctx_ptr = fmt_ctx;
+    m_pSeekFrame = OSG_ALLOC_FRAME();
     m_pSrcFrame = OSG_ALLOC_FRAME();
-	//
+    //
     if (scaledWidth > 0)
     {
         //
@@ -200,32 +221,34 @@ FFmpegVideoReader::close(void)
     {
         av_free_packet(&m_packet);
     }
-	if (m_pSeekFrame)
-	{
-		OSG_FREE_FRAME (& m_pSeekFrame);
-		m_pSeekFrame = NULL;
-	}
+    if (m_pSeekFrame)
+    {
+        OSG_FREE_FRAME (& m_pSeekFrame);
+        m_pSeekFrame = NULL;
+    }
     if (m_pSrcFrame)
     {
         OSG_FREE_FRAME (& m_pSrcFrame);
         m_pSrcFrame = NULL;
     }
 #ifdef USE_SWSCALE    
-	if (img_convert_ctx)
-	{
+    if (img_convert_ctx)
+    {
         sws_freeContext(img_convert_ctx);
         img_convert_ctx = NULL;
-	}
+    }
 #endif
-	if (m_fmt_ctx_ptr)
-	{
+    if (m_fmt_ctx_ptr)
+    {
+// see: https://gitorious.org/ffmpeg/sastes-ffmpeg/commit/5266045
+// "add avformat_close_input()."
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(53, 17, 0)
         avformat_close_input(&m_fmt_ctx_ptr);
 #else
         av_close_input_file(m_fmt_ctx_ptr);
 #endif
-	    m_fmt_ctx_ptr = NULL;
-	}
+        m_fmt_ctx_ptr = NULL;
+    }
 }
 
 float
@@ -302,88 +325,88 @@ FFmpegVideoReader::get_height(void) const
 const int64_t
 FFmpegVideoReader::get_duration(void) const
 {
-	if (m_is_video_duration_determined == false)
-	{
-        const float         lastFrameTime_ms = 1.0 / get_fps() * 1000;
-		m_video_duration = m_fmt_ctx_ptr->duration / 1000;
-		//
-		// Subtract last frame duration.
-		//
+    if (m_is_video_duration_determined == false)
+    {
+        const float         lastFrameTime_ms = 1000.0f / get_fps();         // 1/fps*1000
+        m_video_duration = m_fmt_ctx_ptr->duration * 1000 / AV_TIME_BASE;   // milliseconds
+        //
+        // Subtract last frame duration.
+        //
         m_video_duration -= lastFrameTime_ms;
         //
-		// Try seek
-		//
-		const int           w           = m_new_width;
-		const int           h           = m_new_height;
+        // Try seek
+        //
+        const int           w           = m_new_width;
+        const int           h           = m_new_height;
         const int           bufSize     = avpicture_get_size(m_pixelFormat, w, h);
-		unsigned char *     pBuf        = (unsigned char*)av_malloc (bufSize);
-		FFmpegVideoReader * this_ptr    = const_cast<FFmpegVideoReader *>(this);
-		int                 seek_rezult = this_ptr->seek(m_video_duration, pBuf);
-		if (seek_rezult < 0)
-		{
-		    //
-		    // Try use shadow-functionality of fundtion FFmpegVideoReader::seek(), when
-		    // trying to seek last-position, iterator pass last frame(with last available timestamp)
-		    //
-			if (m_seekFoundLastTimeStamp == true)
-			{
-				m_video_duration = m_lastFoundInSeekTimeStamp_sec * 1000;
-				seek_rezult = 0;
-			}
-		}
-		if (seek_rezult < 0)
-		{
-			// If we cannot determine time by represented duration-value,
-			// try to determine it by search of last-packet time
-			//
-			// Seek at start of video
-			//
-			seek_rezult = this_ptr->seek(0, pBuf);
-			//
-			// Start we should find guaranty.
-			//
-			if (seek_rezult >= 0)
-			{
-				AVPacket				packet;
-				//
-				packet.data = NULL;
-				while (true)
-				{
-					// Free old packet
-					if(packet.data != NULL)
-						av_free_packet(& packet);
+        unsigned char *     pBuf        = (unsigned char*)av_malloc (bufSize);
+        FFmpegVideoReader * this_ptr    = const_cast<FFmpegVideoReader *>(this);
+        int                 seek_rezult = this_ptr->seek(m_video_duration, pBuf);
+        if (seek_rezult < 0)
+        {
+            //
+            // Try use shadow-functionality of fundtion FFmpegVideoReader::seek(), when
+            // trying to seek last-position, iterator pass last frame(with last available timestamp)
+            //
+            if (m_seekFoundLastTimeStamp == true)
+            {
+                m_video_duration = m_lastFoundInSeekTimeStamp_sec * 1000;
+                seek_rezult = 0;
+            }
+        }
+        if (seek_rezult < 0)
+        {
+            // If we cannot determine time by represented duration-value,
+            // try to determine it by search of last-packet time
+            //
+            // Seek at start of video
+            //
+            seek_rezult = this_ptr->seek(0, pBuf);
+            //
+            // Start we should find guaranty.
+            //
+            if (seek_rezult >= 0)
+            {
+                AVPacket                packet;
+                //
+                packet.data = NULL;
+                while (true)
+                {
+                    // Free old packet
+                    if(packet.data != NULL)
+                        av_free_packet(& packet);
 
-					bool existRezult;
-					// Read new packet
-					do
-					{
-						existRezult = true;
-						const int readPacketRez = av_read_frame(m_fmt_ctx_ptr, & packet);
-						if(readPacketRez < 0)
-						{
-							existRezult = false;
-							break;
-						}
-					} while (packet.stream_index != m_videoStreamIndex);
-					if (existRezult)
-					{
-						m_video_duration = (packet.dts * av_q2d(m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base)) * 1000;
-					}
-					else
-					{
-						break;
-					}
-				}
-				m_video_duration -= lastFrameTime_ms;
-			}
-		}
+                    bool existRezult;
+                    // Read new packet
+                    do
+                    {
+                        existRezult = true;
+                        const int readPacketRez = av_read_frame(m_fmt_ctx_ptr, & packet);
+                        if(readPacketRez < 0)
+                        {
+                            existRezult = false;
+                            break;
+                        }
+                    } while (packet.stream_index != m_videoStreamIndex);
+                    if (existRezult)
+                    {
+                        m_video_duration = (packet.dts * av_q2d(m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base)) * 1000;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                m_video_duration -= lastFrameTime_ms;
+            }
+        }
         //
         // Seek at start of video
         //
         seek_rezult = this_ptr->seek(0, pBuf);
-		av_free (pBuf);
-		m_is_video_duration_determined = true;
-	}
+        av_free (pBuf);
+        m_is_video_duration_determined = true;
+    }
 
     return m_video_duration;
 }
@@ -416,7 +439,7 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
         while (m_bytesRemaining > 0)
         {
             // Decode the next chunk of data
-			bytesDecoded = avcodec_decode_video2 (pCodecCtx, pFrame, & frameFinished, & m_packet);
+            bytesDecoded = avcodec_decode_video2 (pCodecCtx, pFrame, & frameFinished, & m_packet);
 
             // Was there an error?
             if(bytesDecoded < 0)
@@ -428,10 +451,10 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
             // We should check twice to search rezult, if first-time had not 100% successfull.
             // Some tests prove it.
             //
-			if (frameFinished == 0)
-			{
-			    bytesDecoded = avcodec_decode_video2 (pCodecCtx, pFrame, &frameFinished, &m_packet);
-			}
+            if (frameFinished == 0)
+            {
+                bytesDecoded = avcodec_decode_video2 (pCodecCtx, pFrame, &frameFinished, &m_packet);
+            }
 
             m_bytesRemaining -= bytesDecoded;
 
@@ -461,10 +484,10 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
             if (frameFinished)
             {
 #ifdef FFMPEG_DEBUG
-		        fprintf (stdout, "pts: %f\n", pts);
+                fprintf (stdout, "pts: %f\n", pts);
 #endif // FFMPEG_DEBUG
-		        currTime = pts;
-    	        return true;
+                currTime = pts;
+                return true;
             }
         }
 
@@ -477,14 +500,14 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
                 av_free_packet(&m_packet);
 
             // Read new packet
-			const int readPacketRez = av_read_frame(m_fmt_ctx_ptr, &m_packet);
+            const int readPacketRez = av_read_frame(m_fmt_ctx_ptr, &m_packet);
 #ifdef FFMPEG_DEBUG
-			int64_t	l_pts = m_packet.pts;
-			int64_t	l_dts = m_packet.dts;
-			fprintf (stdout, "m_packet.pts = %lu; m_packet.dts = %lu; m_packet.pos = %lu;\n",
-				(int)l_pts,
-				(int)l_dts,
-				(int)m_packet.pos);
+            int64_t l_pts = m_packet.pts;
+            int64_t l_dts = m_packet.dts;
+            fprintf (stdout, "m_packet.pts = %lu; m_packet.dts = %lu; m_packet.pos = %lu;\n",
+                (int)l_pts,
+                (int)l_dts,
+                (int)m_packet.pos);
 #endif // FFMPEG_DEBUG
             currPacketPos = m_packet.pos;
             if(readPacketRez < 0)
@@ -555,10 +578,10 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec)
 
     if (GetNextFrame(pCodecCtx, m_pSrcFrame, packetPos, timeStampInSec))
     {
-    	// Convert image to necessary format
+        // Convert image to necessary format
 #ifdef USE_SWSCALE
-		if(img_convert_ctx == NULL)
-		{
+        if(img_convert_ctx == NULL)
+        {
             img_convert_ctx = sws_getContext(pCodecCtx->width, pCodecCtx->height,
                                             pCodecCtx->pix_fmt,
                                             m_new_width, m_new_height,
@@ -571,12 +594,12 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec)
                 fprintf(stderr, "Cannot initialize the video conversion context\n");
                 return -1;
             }
-		}
+        }
 
-		sws_scale(img_convert_ctx, m_pSrcFrame->data,
-				  m_pSrcFrame->linesize, 0,
-				  pCodecCtx->height,
-				  pFrameRGB->data, pFrameRGB->linesize);
+        sws_scale(img_convert_ctx, m_pSrcFrame->data,
+                  m_pSrcFrame->linesize, 0,
+                  pCodecCtx->height,
+                  pFrameRGB->data, pFrameRGB->linesize);
 #else
         img_convert(pFrameRGB->data, m_pixelFormat, m_pSrcFrame->data,
                     pCodecCtx->pix_fmt, pCodecCtx->width, pCodecCtx->height);
@@ -591,7 +614,7 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec)
 }
 
 int
-FFmpegVideoReader::seek(int64_t timestamp, unsigned char * ptrRGBmap)
+FFmpegVideoReader::seek(int64_t timestamp/*milliseconds*/, unsigned char * ptrRGBmap)
 {
     if (ptrRGBmap == NULL)
     {
@@ -599,43 +622,47 @@ FFmpegVideoReader::seek(int64_t timestamp, unsigned char * ptrRGBmap)
         return -1;
     }
 
-	timestamp *= 1000;
-	int             ret             = -1;
-    const double    requiredTime    = timestamp / 1000000.0;
+    //
+    // convert to AV_TIME_BASE
+    //
+    timestamp *= AV_TIME_BASE / 1000;
+
+    int             ret             = -1;
+    const double    requiredTime    = (double)timestamp / (double)AV_TIME_BASE; // to seconds
     //
     // add the stream start time
     if (m_fmt_ctx_ptr->start_time != AV_NOPTS_VALUE)
         timestamp += m_fmt_ctx_ptr->start_time;
 
-	int64_t 	    seek_target     = timestamp;
-	{
-		AVRational a;
-		a.num = 1;
-		a.den = AV_TIME_BASE;
+    int64_t         seek_target     = timestamp;
+    {
+        AVRational a;
+        a.num = 1;
+        a.den = AV_TIME_BASE;
 
-		seek_target= av_rescale_q (timestamp, a, m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
-	}
+        seek_target = av_rescale_q (timestamp, a, m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
+    }
 
     m_FirstFrame = true;
 
-	int             retValueSeekFrame = av_seek_frame (m_fmt_ctx_ptr, m_videoStreamIndex, seek_target, AVSEEK_FLAG_BACKWARD);
+    int             retValueSeekFrame = av_seek_frame (m_fmt_ctx_ptr, m_videoStreamIndex, seek_target, AVSEEK_FLAG_BACKWARD);
     //
-	// Try to resolve TROUBLE by seeking with other flags.
-	// When I want seek(0), AVSEEK_FLAG_BACKWARD returns ERROR, but AVSEEK_FLAG_ANY returns OK but not
-	// actual time(not 0 but 0.0xx). It is better than nothing.
+    // Try to resolve TROUBLE by seeking with other flags.
+    // When I want seek(0), AVSEEK_FLAG_BACKWARD returns ERROR, but AVSEEK_FLAG_ANY returns OK but not
+    // actual time(not 0 but 0.0xx). It is better than nothing.
     //
-	if (retValueSeekFrame < 0)
-		 retValueSeekFrame = av_seek_frame(m_fmt_ctx_ptr, m_videoStreamIndex, seek_target, AVSEEK_FLAG_ANY);
+    if (retValueSeekFrame < 0)
+         retValueSeekFrame = av_seek_frame(m_fmt_ctx_ptr, m_videoStreamIndex, seek_target, AVSEEK_FLAG_ANY);
     
     if (retValueSeekFrame >= 0)
-	{
-		AVCodecContext *    pCodecCtx = m_fmt_ctx_ptr->streams[m_videoStreamIndex]->codec;
+    {
+        AVCodecContext *    pCodecCtx = m_fmt_ctx_ptr->streams[m_videoStreamIndex]->codec;
         avcodec_flush_buffers(pCodecCtx);
         //
         unsigned long       packetPosLoop;
-        double			    timeLoop;
+        double              timeLoop;
         bool                bSuccess = GetNextFrame(pCodecCtx, m_pSeekFrame, packetPosLoop, timeLoop);
-        double			    timeLoopPrev = timeLoop;
+        double              timeLoopPrev = timeLoop;
         if (bSuccess)
         {
             //
@@ -645,40 +672,40 @@ FFmpegVideoReader::seek(int64_t timestamp, unsigned char * ptrRGBmap)
             //
             while (timeLoopPrev > requiredTime && seek_target > 0)
             {
-				AVRational q;
-				q.num = 1;
-				q.den = AV_TIME_BASE;
+                AVRational q;
+                q.num = 1;
+                q.den = AV_TIME_BASE;
 
                 // Go-back with 0.1-sec step till seek found WELL-rezults.
-                seek_target -= av_rescale_q(1000000 * 0.1, q, m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
+                seek_target -= av_rescale_q(AV_TIME_BASE * 0.1, q, m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
                 av_seek_frame(m_fmt_ctx_ptr, m_videoStreamIndex, seek_target, AVSEEK_FLAG_BACKWARD);
                 bSuccess = GetNextFrame(pCodecCtx, m_pSeekFrame, packetPosLoop, timeLoop);
                 timeLoopPrev = timeLoop;
             }
-			m_seekFoundLastTimeStamp = false;
+            m_seekFoundLastTimeStamp = false;
             while (true)
             {
-				if ((timeLoopPrev <= requiredTime && timeLoop >= requiredTime)
+                if ((timeLoopPrev <= requiredTime && timeLoop >= requiredTime)
                     || timeLoopPrev >= requiredTime)
-				{
-					break;
-				}
-				timeLoopPrev = timeLoop;
-				//
+                {
+                    break;
+                }
+                timeLoopPrev = timeLoop;
+                //
                 bSuccess = GetNextFrame(pCodecCtx, m_pSeekFrame, packetPosLoop, timeLoop);
                 if (bSuccess == false)
                 {
-                	//
-                	// To accelerate seach of last time-stamp(actual video duration)
-                	// we save these values to use it in searching of video-duration
-                	//
-                	// For other cases, is will return error as before.
-                	//
-                	m_lastFoundInSeekTimeStamp_sec = timeLoopPrev;
-                	m_seekFoundLastTimeStamp = true;
-                	//
-                	//
-                	return -1;
+                    //
+                    // To accelerate seach of last time-stamp(actual video duration)
+                    // we save these values to use it in searching of video-duration
+                    //
+                    // For other cases, is will return error as before.
+                    //
+                    m_lastFoundInSeekTimeStamp_sec = timeLoopPrev;
+                    m_seekFoundLastTimeStamp = true;
+                    //
+                    //
+                    return -1;
                 }
             }
             //
@@ -731,10 +758,10 @@ FFmpegVideoReader::seek(int64_t timestamp, unsigned char * ptrRGBmap)
     }
     else
     {
-    	fprintf (stderr, "Cannot seek video frame\n");
+        fprintf (stderr, "Cannot seek video frame\n");
     }
 
-	return ret;
+    return ret;
 }
 
 } // namespace osgFFmpeg

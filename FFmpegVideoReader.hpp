@@ -15,14 +15,14 @@ private:
 #ifdef USE_SWSCALE
     struct SwsContext * img_convert_ctx;
 #endif
-    AVPacket         	m_packet;
+    AVPacket            m_packet;
     AVFrame *           m_pSeekFrame;
     AVFrame *           m_pSrcFrame;
     PixelFormat         m_pixelFormat;
-    mutable bool		m_is_video_duration_determined;
-    mutable int64_t		m_video_duration;
-    double				m_lastFoundInSeekTimeStamp_sec;
-    bool				m_seekFoundLastTimeStamp;
+    mutable bool        m_is_video_duration_determined;
+    mutable int64_t     m_video_duration;
+    double              m_lastFoundInSeekTimeStamp_sec;
+    bool                m_seekFoundLastTimeStamp;
 
     unsigned int        m_new_width;
     unsigned int        m_new_height;
@@ -36,7 +36,7 @@ public:
     // If [scaledWidth] == 0, actual video size will produced. In another case, video-size may be scaled to
     // width == [scaledWidth] with actual Video Aspect Ratio when new width is less then actual width.
     const int           openFile(const char *filename, FFmpegParameters * parameters, const bool useRGB_notBGR, const long scaledWidth, float & aspectRatio, float & frame_rate, bool & alphaChannel);
-    void	            close(void);
+    void                close(void);
     int                 seek(int64_t timestamp, unsigned char * ptrRGBmap);
     // buffer-size should be width*height*3 bytes;
     int                 grabNextFrame(uint8_t * buffer, double & timeStampInSec);

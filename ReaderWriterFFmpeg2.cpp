@@ -125,7 +125,7 @@ public:
 
     virtual ~ReaderWriterFFmpeg2()
     {
-		// Undo the initialization done by avformat_network_init.
+        // Undo the initialization done by avformat_network_init.
 #if LIBAVFORMAT_VERSION_MAJOR >= 54
         avformat_network_deinit();
 #else

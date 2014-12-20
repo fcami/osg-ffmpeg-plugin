@@ -21,10 +21,6 @@ extern "C"
     #include <libswscale/swscale.h>
 #endif
 
-// todo: this lib should be added to CMake
-#if LIBAVCODEC_VERSION_MAJOR >= 56
-#include <libswresample/swresample.h>
-#endif
 
 #if LIBAVUTIL_VERSION_INT <  AV_VERSION_INT(50,38,0)
 #define AV_SAMPLE_FMT_NONE SAMPLE_FMT_NONE
@@ -36,8 +32,17 @@ extern "C"
 #define AV_SAMPLE_FMT_NB   SAMPLE_FMT_NB
 #endif
 
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(51,73,101)
-#define OSG_ABLE_PLANAR_AUDIO
+// See: https://gitorious.org/libav/libav/commit/8889cc4f5b767b323901115a92318a024336e2a1
+// "Add planar sample formats and av_sample_fmt_is_planar() to samplefmt.h."
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(51, 17, 0)
+    #define OSG_ABLE_PLANAR_AUDIO
+#endif
+// See: https://gitorious.org/libav/dondiego-libav/commit/30223b3bf2ab1c55499d3d52a244221d24fcc784
+// "deprecate the audio resampling API."
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(54, 31, 0)
+    #define OSG_ABLE_SWRCONTEXT
+    // todo: this lib should be added to CMake
+    #include <libswresample/swresample.h>
 #endif
 
 // Changes for FFMpeg version greater than 0.6
