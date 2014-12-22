@@ -7,8 +7,6 @@
 namespace osgFFmpeg
 {
 
-// todo: When audio reader grabbs all audio, it seems that timer stops, and video do not change frames.
-
 FFmpegLibAvStreamImpl::FFmpegLibAvStreamImpl()
 :m_AudioBufferTimeSec(6),
 m_ellapsedAudioMicroSec(0),
@@ -119,9 +117,6 @@ FFmpegLibAvStreamImpl::loop() const
 const unsigned long
 FFmpegLibAvStreamImpl::GetAudioPlaybackTime() const
 {
-    if (m_audio_buffering_finished == true)
-        return std::numeric_limits<unsigned long>::max();
-
     return (m_ellapsedAudioMicroSec < m_audioDelayMicroSec) ? 0 : (m_ellapsedAudioMicroSec - m_audioDelayMicroSec)/1000;
 }
 
@@ -456,6 +451,8 @@ FFmpegLibAvStreamImpl::run()
                     else
                     {
                         m_audio_buffering_finished = true;
+                        if (bytesread < 0)
+                            throw std::runtime_error("Audio failed");
                     }
                 }
             }

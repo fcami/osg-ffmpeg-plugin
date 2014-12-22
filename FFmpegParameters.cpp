@@ -25,6 +25,12 @@ inline PixelFormat osg_av_get_pix_fmt(const char *name) { return av_get_pix_fmt(
 namespace osgFFmpeg {
 
 
+const std::string AvStrError(int errnum)
+{
+    char buf[128];
+    av_strerror(errnum, buf, sizeof(buf));
+    return std::string(buf);
+}
 
 FFmpegParameters::FFmpegParameters() :
     m_format(0),

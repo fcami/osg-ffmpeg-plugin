@@ -384,6 +384,16 @@ FFmpegVideoReader::get_duration(void) const
                         const int readPacketRez = av_read_frame(m_fmt_ctx_ptr, & packet);
                         if(readPacketRez < 0)
                         {
+                            if (readPacketRez == static_cast<int>(AVERROR_EOF) ||
+                                m_fmt_ctx_ptr->pb->eof_reached)
+                            {
+                                // File(all streams) finished
+                            }
+                            else {
+                                OSG_FATAL << "av_read_frame() returned " << AvStrError(readPacketRez) << std::endl;
+                                throw std::runtime_error("av_read_frame() failed");
+                            }
+
                             existRezult = false;
                             break;
                         }
@@ -511,7 +521,19 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
 #endif // FFMPEG_DEBUG
             currPacketPos = m_packet.pos;
             if(readPacketRez < 0)
+            {
+                if (readPacketRez == static_cast<int>(AVERROR_EOF) ||
+                    m_fmt_ctx_ptr->pb->eof_reached)
+                {
+                    // File(all streams) finished
+                }
+                else {
+                    OSG_FATAL << "av_read_frame() returned " << AvStrError(readPacketRez) << std::endl;
+                    throw std::runtime_error("av_read_frame() failed");
+                }
+
                 goto loop_exit;
+            }
         } while(m_packet.stream_index != m_videoStreamIndex);
 
         m_bytesRemaining = m_packet.size;

@@ -9,6 +9,7 @@
 
 namespace osgFFmpeg {
 
+const std::string AvStrError(int errnum);
 
 
 class FFmpegParameters : public osg::Referenced

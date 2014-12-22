@@ -505,6 +505,16 @@ FFmpegAudioReader::GetNextFrame(double & currTime, int16_t * output_buffer, unsi
 
             if(readPacketRez < 0)
             {
+                if (readPacketRez == static_cast<int>(AVERROR_EOF) ||
+                    m_fmt_ctx_ptr->pb->eof_reached)
+                {
+                    // File(all streams) finished
+                }
+                else {
+                    OSG_FATAL << "av_read_frame() returned " << AvStrError(readPacketRez) << std::endl;
+                    throw std::runtime_error("av_read_frame() failed");
+                }
+
                 // End of stream. Done decoding.
                 return false;
             }
