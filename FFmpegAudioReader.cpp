@@ -2,6 +2,8 @@
 #include "FFmpegParameters.hpp"
 #include <string>
 
+#include <stdexcept>
+
 namespace osgFFmpeg {
 
 const int

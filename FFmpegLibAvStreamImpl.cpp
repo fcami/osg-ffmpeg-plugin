@@ -3,6 +3,7 @@
 #include "FFmpegPlayer.hpp"
 #include <osg/Notify>
 #include <limits>
+#include <stdexcept>
 
 namespace osgFFmpeg
 {

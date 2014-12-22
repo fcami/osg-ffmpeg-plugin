@@ -10,6 +10,7 @@ extern "C"
 #include <stdint.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavutil/channel_layout.h>
 
 #ifndef ANDROID
 #include <libavdevice/avdevice.h>

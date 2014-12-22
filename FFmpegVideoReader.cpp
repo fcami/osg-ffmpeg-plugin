@@ -1,6 +1,7 @@
 #include "FFmpegVideoReader.hpp"
 #include "FFmpegParameters.hpp"
 #include <string>
+#include <stdexcept>
 
 namespace osgFFmpeg {
 
