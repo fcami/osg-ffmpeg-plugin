@@ -16,7 +16,7 @@ class FFmpegAudioReader
 private:
     int16_t *               m_output_buffer;
     unsigned char           m_intermediate_channelsNb;
-#ifdef OSG_ABLE_SWRCONTEXT
+#ifdef USE_SWRESAMPLE
     SwrContext *            m_audio_swr_cntx;
 #else
     ReSampleContext *       m_audio_resample_cntx;

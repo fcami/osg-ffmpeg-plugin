@@ -21,7 +21,7 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
     m_reader_buffer_shift               = 0;
     m_output_buffer_length_prev         = 0;
     m_FirstFrame                        = true;
-#ifdef OSG_ABLE_SWRCONTEXT
+#ifdef USE_SWRESAMPLE
     m_audio_swr_cntx                    = NULL;
 #else
     m_audio_resample_cntx               = NULL;
@@ -628,7 +628,7 @@ FFmpegAudioReader::get_duration(void) const
 void
 FFmpegAudioReader::release_params_getSample(void)
 {
-#ifdef OSG_ABLE_SWRCONTEXT
+#ifdef USE_SWRESAMPLE
     if (m_audio_swr_cntx)
     {
         swr_free( & m_audio_swr_cntx);
@@ -708,7 +708,7 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
     //
     unsigned int            output_buffer_size;
     double                  input_currTime;
-#ifdef OSG_ABLE_SWRCONTEXT
+#ifdef USE_SWRESAMPLE
     AVCodecContext *        pCodecCtx               = input_audio->m_fmt_ctx_ptr->streams[input_audio->m_audioStreamIndex]->codec;
 #endif
     //
@@ -789,7 +789,7 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
                 input_buffer_size = readed_from_decoder;
 
             int audio_resample_rc;
-#ifdef OSG_ABLE_SWRCONTEXT
+#ifdef USE_SWRESAMPLE
             const int output_layout = guessLayoutByChannelsNb(output_channels);
             // Fix when layout is not set.
             const int input_layout = pCodecCtx->channel_layout == 0 ? guessLayoutByChannelsNb(input_Channels) : pCodecCtx->channel_layout;

@@ -10,7 +10,7 @@ extern "C"
 #include <stdint.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#include <libavutil/channel_layout.h>
+// #include <libavutil/channel_layout.h> // this file exist not for any ver of ffmpeg. But necessary definitions could be accessed via common files /avcodec.h or /avformat.h
 
 #ifndef ANDROID
 #include <libavdevice/avdevice.h>
@@ -40,9 +40,39 @@ extern "C"
 #endif
 // See: https://gitorious.org/libav/dondiego-libav/commit/30223b3bf2ab1c55499d3d52a244221d24fcc784
 // "deprecate the audio resampling API."
-#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(54, 31, 0)
-    #define OSG_ABLE_SWRCONTEXT
-    // todo: this lib should be added to CMake
+// But: Existence of swresample does not depends on version of avcodec.
+// By analogue with USE_SWSCALE (which defined during preparing OSG-solution), and example from:
+// https://gitorious.org/neutrino-hd/martiis-libstb-hal/commit/8a68eb3f1522642d5318abb2c75b86285f1ae87e
+// using of swresample delegate to definition of USE_SWRESAMPLE
+// So, to use modern way (if available) of resampling, we should modify CMake-environment before preparing OSG-solution.
+// tips:
+// 1. Modify "./src/CMakeModules/FindFFmpeg.cmake"
+//  
+// add follow line:
+//
+// FFMPEG_FIND(LIBSWRESAMPLE  swresample  swresample.h)
+//
+// after block of lines:
+//
+// FFMPEG_FIND(LIBAVFORMAT avformat avformat.h)
+// FFMPEG_FIND(LIBAVDEVICE avdevice avdevice.h)
+// FFMPEG_FIND(LIBAVCODEC  avcodec  avcodec.h)
+// FFMPEG_FIND(LIBAVUTIL   avutil   avutil.h)
+// FFMPEG_FIND(LIBSWSCALE  swscale  swscale.h)  # not sure about the header to look for here.
+//
+// 2. Modify "CMakeLists.txt" of plugin, similar to swscale and targeted to definition of USE_SWRESAMPLE
+//    add follow lines:
+//
+//IF(FFMPEG_LIBSWRESAMPLE_FOUND)
+//
+//    INCLUDE_DIRECTORIES( ${FFMPEG_LIBSWRESAMPLE_INCLUDE_DIRS} ${FFMPEG_LIBSWRESAMPLE_INCLUDE_DIRS}/libswresample )
+//
+//    ADD_DEFINITIONS(-DUSE_SWRESAMPLE)
+//
+//    SET(TARGET_EXTERNAL_LIBRARIES ${FFMPEG_LIBRARIES} ${FFMPEG_LIBSWRESAMPLE_LIBRARIES})
+//
+//ENDIF()
+#ifdef USE_SWRESAMPLE
     #include <libswresample/swresample.h>
 #endif
 
