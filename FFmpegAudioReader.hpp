@@ -62,7 +62,8 @@ public:
                                         const AVSampleFormat & output_sampleFormat,
                                         unsigned short & sample_rate,
                                         unsigned long & samplesNb,
-                                        unsigned char * bufSamples);
+                                        unsigned char * bufSamples,
+                                        const double & max_avail_time_micros);
 };
 
 } // namespace osgFFmpeg

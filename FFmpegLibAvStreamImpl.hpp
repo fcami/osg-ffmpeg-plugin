@@ -41,6 +41,7 @@ private:
     bool                            m_isNeedFlushBuffers;
     FFmpegPlayer *                  m_pPlayer;
     volatile bool                   m_shadowThreadStop;
+    const bool                      isPlaybackFinished();
     void                            preRun();
     void                            startPlayback();
     virtual void                    run ();

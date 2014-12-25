@@ -218,10 +218,16 @@ FFmpegLibAvStreamImpl::GetFramePtr(const unsigned long & timePosMS, unsigned cha
         err = m_video_buffer.GetFramePtr (timePosMS, pArray);
         if (err != 0)
         {
-            //
-            // Clear buffer to load next block
-            //
-            m_video_buffer.flush();
+            // To unlock grabbing stream(and avoid deadlock)
+            // here we have to flush buffer
+            if (m_video_buffer.isBufferFull() &&
+                m_video_buffer.isStreamFinished() == false)
+            {
+                //
+                // Clear buffer to load next block
+                //
+                m_video_buffer.flush();
+            }
         }
     }
     catch (...)
@@ -345,7 +351,7 @@ FFmpegLibAvStreamImpl::postRun()
         m_ellapsedAudioMicroSec = 0;
     }
     //
-    // If streams finished, reset pointer to start position
+    // If buffering finished, reset pointer to start position
     // 
     if (m_audio_buffering_finished == true && m_video_buffer.isStreamFinished())
     {
@@ -383,6 +389,26 @@ FFmpegLibAvStreamImpl::startPlayback()
         m_renderer.start();
 }
 
+const bool
+FFmpegLibAvStreamImpl::isPlaybackFinished()
+{
+    // Audio finish playback
+    if (isHasAudio())
+    {
+        if (m_audio_buffering_finished == true &&
+            m_audio_buffer.size() == m_audio_buffer.freeSpaceSize())//audio buffer is empty, playback finished
+            return true;
+    }
+    else
+    {
+        const unsigned long elapsedTimeMS = ElapsedMilliseconds();
+        const double duration_ms = m_pPlayer->getLength();
+        if (elapsedTimeMS >= duration_ms)
+            return true;
+    }
+    return false;
+}
+
 void
 FFmpegLibAvStreamImpl::run()
 {
@@ -391,7 +417,9 @@ FFmpegLibAvStreamImpl::run()
 
     preRun();
 
-    const unsigned short    samplesPart = 32767; // do not change. This is restriction of ffmpeg-wrapper
+    // Minimal samples for time-period passed by one frame multiplied by two(speed of filling audio buffer should be faster than audio playback),
+    // limited by 32767 as restriction of ffmpeg-wrapper
+    const unsigned short    samplesPart = std::min((double)32767, (double)(m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb * m_audioFormat.m_sampleRate) / m_frame_rate * 2); 
     const unsigned int      minBlockSize = samplesPart * m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb;
     unsigned char *         pAudioData = minBlockSize > 0 ? new unsigned char[minBlockSize * 2] : NULL; // ... * 2], because it could read more than minBlockSize
     try
@@ -405,6 +433,7 @@ FFmpegLibAvStreamImpl::run()
         unsigned int        necAudioSpace       = minBlockSize; // may take only two valus: 1) minBlockSize 2) m_audio_buffer.size() / 2
         while (m_shadowThreadStop == false)
         {
+            unsigned int    videoWriteFlag = 0;
             audioBufferFull = true;
             videoBufferFull = true;
             //
@@ -437,13 +466,47 @@ FFmpegLibAvStreamImpl::run()
                 }
                 if (space_audio_size > necAudioSpace && m_audio_buffering_finished == false)
                 {
+                    double  max_avail_time_micros = -1.0;
+                    //
+                    // Limit audio-grabbing by time to avoid video artifacts
+                    //
+                    if (isPlaybackStarted)
+                    {
+                        //
+                        // 1. To avoid audio-artifacts, we should guaranty that audio-buffer filled.
+                        //    So, as less audio-buffer filled, as more available time for audio grabbing.
+                        //    Even if it will become to appear the video artifacts.
+                        //
+                        // 2. To avoid video-artifacts, we should TRY spend as less as possible time for
+                        //    audio grabbing.
+                        //
+                        const double audio_bufferedTimeSec  = (double)(m_audio_buffer.size() - space_audio_size) / (double)(m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb * m_audioFormat.m_sampleRate);
+                        //
+                        const double audio_bufferedRatio    = (double)(m_audio_buffer.size() - space_audio_size) / (double)m_audio_buffer.size();
+                        if (audio_bufferedRatio > 0.25)
+                        {
+                            // 25% - limited by time for 100 video frame time
+                            // 50% - limited by time for 1/4 video frame time
+                            const double video_frameTimeSec = 1.0 / m_frame_rate;
+                            //
+                            double coeff = 100.0 - (audio_bufferedRatio - 0.25)*(99.75/0.25);
+                            if (coeff < DBL_MIN)
+                                coeff = DBL_MIN;
+                            max_avail_time_micros = video_frameTimeSec * coeff * 1000000.0;
+                        }
+                        else
+                        {
+                            videoWriteFlag |= 1; // disable decoding during searching
+                        }
+                    }
                     const int bytesread = FFmpegWrapper::getAudioSamples(m_audioIndex,
                                                                             123456789,
                                                                             m_audioFormat.m_channelsNb,
                                                                             m_audioFormat.m_avSampleFormat,
                                                                             m_audioFormat.m_sampleRate,
                                                                             samplesPart,
-                                                                            pAudioData) * m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb;
+                                                                            pAudioData,
+                                                                            max_avail_time_micros) * m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb;
                     if (bytesread > 0)
                     {
                         m_audio_buffer.write (pAudioData, bytesread);
@@ -462,13 +525,14 @@ FFmpegLibAvStreamImpl::run()
             //
             if (isHasVideo())
             {
-                if (m_video_buffer.isBufferFull() == false)
+                if (m_video_buffer.isBufferFull() == false &&
+                    m_video_buffer.isStreamFinished() == false)
                 {
-                    m_video_buffer.writeFrame();
+                    m_video_buffer.writeFrame (videoWriteFlag);
                     videoBufferFull = false;
                 }
             }
-            if (m_audio_buffering_finished == true && m_video_buffer.isStreamFinished())
+            if (isPlaybackStarted && isPlaybackFinished())
             {
                 break;
             }

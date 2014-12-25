@@ -1,6 +1,7 @@
 #include "FFmpegAudioReader.hpp"
 #include "FFmpegParameters.hpp"
 #include <string>
+#include <osg/Timer>
 
 #include <stdexcept>
 
@@ -538,6 +539,8 @@ FFmpegAudioReader::GetNextFrame(double & currTime, int16_t * output_buffer, unsi
 int
 FFmpegAudioReader::seek(int64_t timestamp /*milliseconds*/)
 {
+    AVCodecContext *pCodecCtx = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
+    avcodec_flush_buffers(pCodecCtx);
     //
     // convert to AV_TIME_BASE
     //
@@ -683,7 +686,8 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
                         const AVSampleFormat & output_sampleFormat,
                         unsigned short & output_FrameRate,
                         unsigned long & samplesNb,
-                        unsigned char * bufSamples)
+                        unsigned char * bufSamples,
+                        const double & max_avail_time_micros)
 {
     // Check initialization/fictive variant of calling this function
     if (output_channels == 0)
@@ -702,6 +706,8 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
         return -1;
     }
 
+    osg::Timer              loc_timer;
+    const double            start_timer_micros      = loc_timer.time_u();
     //
     const int               input_FrameRate         = input_audio->getFrameRate();
     const int               input_Channels          = input_audio->getChannels();
@@ -777,11 +783,15 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
         }
         //
         // If we decoded enough(more than required for encoder) bytes
+        // or spent time more than available(if defined, i.e. \max_avail_time_micros > 0.0),
         // or cannot decode more ...
         //
-        if (input_audio->m_reader_buffer_shift >= input_buffer_size || output_buffer_size == 0)
+        const double    ellapsed_time_micros = loc_timer.time_u() - start_timer_micros;
+        if (input_audio->m_reader_buffer_shift >= input_buffer_size ||
+            output_buffer_size == 0 ||
+            (max_avail_time_micros > 0.0 && ellapsed_time_micros > max_avail_time_micros) )
         {
-            const unsigned int  reader_buffer_shift_0 = input_audio->m_reader_buffer_shift;
+            const unsigned int  reader_buffer_shift_0   = input_audio->m_reader_buffer_shift;
             //
             // Cutoff encoded-bytes by limit of decoded-stream
             //
@@ -790,9 +800,9 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
 
             int audio_resample_rc;
 #ifdef USE_SWRESAMPLE
-            const int output_layout = guessLayoutByChannelsNb(output_channels);
+            const int output_layout                     = guessLayoutByChannelsNb(output_channels);
             // Fix when layout is not set.
-            const int input_layout = pCodecCtx->channel_layout == 0 ? guessLayoutByChannelsNb(input_Channels) : pCodecCtx->channel_layout;
+            const int input_layout                      = pCodecCtx->channel_layout == 0 ? guessLayoutByChannelsNb(input_Channels) : pCodecCtx->channel_layout;
             //
             // For this version it is enough to use one resampler
             if (input_audio->m_audio_swr_cntx == NULL)

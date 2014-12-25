@@ -180,14 +180,14 @@ FFmpegWrapper::getImage(const long indexFile, unsigned long msTime, unsigned cha
 }
 
 const short
-FFmpegWrapper::getNextImage(const long indexFile, unsigned char * bufRGB24, double & timeStampInSec)
+FFmpegWrapper::getNextImage(const long indexFile, unsigned char * bufRGB24, double & timeStampInSec, const bool decodeTillMinReqTime, const double minReqTimeMS)
 {
     short ret_value = -1;
     try
     {
         if (checkIndexVideoValid(indexFile) == 0 && bufRGB24 != NULL)
         {
-            ret_value = g_openedVideoFiles[indexFile]->grabNextFrame(bufRGB24, timeStampInSec);
+            ret_value = g_openedVideoFiles[indexFile]->grabNextFrame(bufRGB24, timeStampInSec, decodeTillMinReqTime, minReqTimeMS);
         }
     }
     catch (...)
@@ -264,7 +264,8 @@ FFmpegWrapper::openAudio(const char * pFileName, FFmpegParameters * parameters)
                                             output_sampleFormat,
                                             output_FrameRate,
                                             samplesNb,
-                                            NULL);
+                                            NULL,
+                                            -1.0);
 
 
             const long maxIndexAudioFiles = g_maxIndexAudioFiles;
@@ -315,7 +316,8 @@ FFmpegWrapper::seekAudio(const long indexFile, const unsigned long time)
                                                 output_sampleFormat,
                                                 output_FrameRate,
                                                 samplesNb,
-                                                NULL);
+                                                NULL,
+                                                -1.0);
 
                 rez_value = 0;
             }
@@ -383,7 +385,8 @@ FFmpegWrapper::getAudioSamples(const long indexFile,
                                 const AVSampleFormat & output_sampleFormat,
                                 unsigned short sample_rate,
                                 unsigned long samplesNb,
-                                unsigned char * bufSamples)
+                                unsigned char * bufSamples,
+                                const double & max_avail_time_micros)
 {
     int rez_value = -1;
     try
@@ -392,7 +395,14 @@ FFmpegWrapper::getAudioSamples(const long indexFile,
         {
             FFMPEGAUDIOREADER* media = g_openedAudioFiles[indexFile];
 
-            rez_value = FFMPEGAUDIOREADER::getSamples(media, msTime, channelsNb, output_sampleFormat, sample_rate, samplesNb, bufSamples);
+            rez_value = FFMPEGAUDIOREADER::getSamples(media,
+                                                    msTime,
+                                                    channelsNb,
+                                                    output_sampleFormat,
+                                                    sample_rate,
+                                                    samplesNb,
+                                                    bufSamples,
+                                                    max_avail_time_micros);
         }
     }
     catch (...)

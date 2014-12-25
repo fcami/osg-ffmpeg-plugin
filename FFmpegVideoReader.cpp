@@ -426,7 +426,9 @@ bool
 FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
                                 AVFrame *pFrame,
                                 unsigned long & currPacketPos,
-                                double & currTime)
+                                double & currTime,
+                                const bool decodeTillMinReqTime,
+                                const double & minReqTimeMS)
 {
     int                     bytesDecoded;
     int                     frameFinished;
@@ -446,6 +448,7 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
     // Decode packets until we have decoded a complete frame
     while(true)
     {
+        bool continue_read_packets;
         // Work on the current packet until we have decoded all of it
         while (m_bytesRemaining > 0)
         {
@@ -467,7 +470,6 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
                 bytesDecoded = avcodec_decode_video2 (pCodecCtx, pFrame, &frameFinished, &m_packet);
             }
 
-            m_bytesRemaining -= bytesDecoded;
 
             // Save global pts to be stored in pFrame in first call
             if (m_packet.dts == AV_NOPTS_VALUE
@@ -489,10 +491,16 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
 
             pts *= av_q2d(m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
         
+            m_bytesRemaining -= bytesDecoded;
             isDecodedData = true;
 
+            continue_read_packets = false;
+            if (decodeTillMinReqTime == true && pts*1000.0 < minReqTimeMS)
+            {
+                continue_read_packets = true;
+            }
             // Did we finish the current frame? Then we can return
-            if (frameFinished)
+            if (frameFinished && continue_read_packets == false)
             {
 #ifdef FFMPEG_DEBUG
                 fprintf (stdout, "pts: %f\n", pts);
@@ -504,6 +512,7 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
 
         // Read the next packet, skipping all packets that aren't for this
         // stream
+        continue_read_packets = false;
         do
         {
             // Free old packet
@@ -535,7 +544,21 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
 
                 goto loop_exit;
             }
-        } while(m_packet.stream_index != m_videoStreamIndex);
+            continue_read_packets = false;
+            if (decodeTillMinReqTime == false) // Check condition for continue searching by min required time without decoding
+            {
+                if (m_packet.stream_index == m_videoStreamIndex && minReqTimeMS >= 0.0)
+                {
+                    if(m_packet.dts != AV_NOPTS_VALUE)
+                    {
+                        const double frame_time_pos_ms = m_packet.dts * av_q2d(m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base) * 1000;
+
+                        if (frame_time_pos_ms < minReqTimeMS)
+                            continue_read_packets = true; // read next
+                    }
+                }
+            }
+        } while(m_packet.stream_index != m_videoStreamIndex || continue_read_packets);
 
         m_bytesRemaining = m_packet.size;
     }
@@ -585,7 +608,7 @@ loop_exit:
 }
 
 int
-FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec)
+FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec, const bool decodeTillMinReqTime, const double & minReqTimeMS)
 {
     unsigned long       packetPos;
     int                 rezValue    = -1;
@@ -598,8 +621,7 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec)
 
     // Assign appropriate parts of buffer to image planes in pFrameRGB
     avpicture_fill ((AVPicture *)pFrameRGB, buffer, m_pixelFormat, m_new_width, m_new_height);
-
-    if (GetNextFrame(pCodecCtx, m_pSrcFrame, packetPos, timeStampInSec))
+    if (GetNextFrame(pCodecCtx, m_pSrcFrame, packetPos, timeStampInSec, decodeTillMinReqTime, minReqTimeMS))
     {
         // Convert image to necessary format
 #ifdef USE_SWSCALE

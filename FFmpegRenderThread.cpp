@@ -52,9 +52,11 @@ FFmpegRenderThread::run()
                 timePosMS = m_pLibAvStream->ElapsedMilliseconds();
 
             {
-                // todo: should be processed to error
                 iErr = m_pLibAvStream->GetFramePtr (timePosMS, pFramePtr);
-                if (pFramePtr != NULL && iErr == 0)
+                // 
+                // Frame could be not best time position(iErr > 0),
+                // but to avoid stucking, we should draw it
+                if (pFramePtr != NULL && iErr >= 0)
                 {
                     m_pImgStream->setImage(
                         m_frameSize.Width,

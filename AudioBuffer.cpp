@@ -91,6 +91,25 @@ AudioBuffer::read (void * buffer, const int & bytesNb)
     if (bytesNb == 0)
         return 0;
 
+/*
+    //
+    // Display audio buffer state
+    //
+    {
+        size_t          i;
+        char            bufferFillState[100];
+        const double    ratio       = (double)(size() - freeSpaceSize()) / (double)size();
+        const double    ratio_10    = ratio * 10;
+        if (ratio < 0.8)
+        {
+            int debug_breakPoint = 0;
+        }
+        for (i = 0; i < ratio_10; ++i)
+            bufferFillState[i] = '|';
+        bufferFillState[i] = 0;
+        fprintf (stdout, "%s\n", bufferFillState);
+    }
+*/
     // Fix local value of cross-thread params
     const int loc_endIndicator  = m_endIndicator;
     //
@@ -103,6 +122,12 @@ AudioBuffer::read (void * buffer, const int & bytesNb)
     if (isSwitchEnd == isSignConst)
     {
         memset ((unsigned char *)buffer, 0, bytesNb);
+        //
+        // Set indicators to same point.
+        // It will be eq to flush buffer, i.e. freeSpaceSize() == size()
+        // and helps to detect moment when audio playback is finished
+        //
+        setStartIndicator ( loc_endIndicator );
         return 0;
     }
 

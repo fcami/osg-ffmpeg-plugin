@@ -120,7 +120,13 @@ public:
     // - No one exception throws from function;
     // - Size of [bufRGB24] should be at less = (3 * width * height) in bytes;
     // - [timeStampInSec] - output value is current time-position of returned frame in seconds;
-    static const short getNextImage(const long indexFile, unsigned char * bufRGB24, double & timeStampInSec);
+    // - [minReqTimeMS] - if greater than 0, it is minimal time which will be searched to return frame.
+    //  If negative, then next frame will be returned. Another words, if [minReqTimeMS]>=0, then [timeStampInSec]
+    //  will be eq or greater than [minReqTimeMS]
+    // - [decodeTillMinReqTime] - if false, then during searching to [minReqTimeMS], packets will not be decoded.
+    //  It is fast but frame will be with artifacts. If true - then no artifacts, but slowly.
+    //  Has not depending, if [minReqTimeMS] < 0.
+    static const short getNextImage(const long indexFile, unsigned char * bufRGB24, double & timeStampInSec, const bool decodeTillMinReqTime = true, const double minReqTimeMS = -1.0);
 
     /// =======================================================================================================================================
     /// Access to read audio
@@ -190,6 +196,9 @@ public:
     //
     // 0 < [samplesNb] < 32768.
     //
+    // if [max_avail_time_micros] <= 0.0, then no effect. Otherwise: this is max time(in microsec) for grabbing audio.
+    // For time-critical cases, it is not necessary grab required number of samples. It could be less.
+    //
     // return values
     // (0..N): number of grabbed samples;
     // -1: error;
@@ -205,7 +214,8 @@ public:
                                         const AVSampleFormat & output_sampleFormat,
                                         unsigned short sample_rate,
                                         unsigned long samplesNb,
-                                        unsigned char * bufSamples);
+                                        unsigned char * bufSamples,
+                                        const double & max_avail_time_micros);
 };
 } // namespace osgFFmpeg
 
