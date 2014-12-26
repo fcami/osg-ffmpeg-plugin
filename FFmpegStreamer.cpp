@@ -40,6 +40,18 @@ FFmpegStreamer::getAudioVolume() const
     return m_pLibAvStreamImpl->getAudioVolume();
 }
 
+const float
+FFmpegStreamer::getAudioBalance() const
+{
+    return m_pLibAvStreamImpl->getAudioBalance();
+}
+
+void
+FFmpegStreamer::setAudioBalance(const float & balance)
+{
+    m_pLibAvStreamImpl->setAudioBalance(balance);
+}
+
 const int
 FFmpegStreamer::open(const FFmpegFileHolder * holder, FFmpegPlayer * pRenderDest)
 {

@@ -11,6 +11,7 @@ namespace osgFFmpeg
 FFmpegLibAvStreamImpl::FFmpegLibAvStreamImpl()
 :m_AudioBufferTimeSec(6),
 m_ellapsedAudioMicroSec(0),
+m_audioBalance(0.0f),
 m_loop(false),
 m_pPlayer(NULL)
 {
@@ -180,6 +181,24 @@ FFmpegLibAvStreamImpl::getAudioVolume() const
     return 0.0f;
 }
 
+const float
+FFmpegLibAvStreamImpl::getAudioBalance() const
+{
+    return m_audioBalance;
+}
+
+void
+FFmpegLibAvStreamImpl::setAudioBalance(const float & balance)
+{
+    m_audioBalance = balance;
+
+    if (m_audioBalance > 1.0f)
+        m_audioBalance = 1.0f;
+
+    if (m_audioBalance < -1.0f)
+        m_audioBalance = -1.0f;
+}
+
 const bool
 FFmpegLibAvStreamImpl::isHasAudio() const
 {
@@ -193,8 +212,61 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
     //
     const double            playbackSec = (double)playbackBytes / (double)(m_audioFormat.m_sampleRate * m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb);
     //
+    // Multiply samples by master volume
+    //
+    if (m_audio_sink.valid())
+    {
+        unsigned long       sampleInd;
+        unsigned char       chInd;
+        const unsigned long playBackSamples             = playbackBytes / m_audioFormat.m_bytePerSample;
+        // [0..1]
+        const float         audioMaterVolume            = m_audio_sink->getVolume();
+        // balance of the audio: -1 = left, 0 = center,  1 = right
+        const float         audioBallance               = m_audioBalance;
+        //
+        float               audioVolumeChannel[128];
+        audioVolumeChannel[0] = audioMaterVolume - ((audioBallance > 0.0f) ? (audioBallance * audioMaterVolume) : 0.0f);
+        audioVolumeChannel[1] = audioMaterVolume + ((audioBallance < 0.0f) ? (audioBallance * audioMaterVolume) : 0.0f);
+        audioVolumeChannel[2] = 0.0f;
+        audioVolumeChannel[3] = 0.0f;
+        audioVolumeChannel[4] = 0.0f;
+        audioVolumeChannel[5] = 0.0f;
+
+        switch (m_audioFormat.m_avSampleFormat)
+        {
+        case AV_SAMPLE_FMT_U8:
+            {
+                uint8_t *           ptr = (uint8_t *)buffer;
+                for (sampleInd = 0; sampleInd < playBackSamples; ++sampleInd, ++ptr)
+                    (*ptr) *= audioVolumeChannel[sampleInd % m_audioFormat.m_channelsNb];
+                break;
+            }
+        case AV_SAMPLE_FMT_S16:
+            {
+                int16_t *           ptr = (int16_t *)buffer;
+                for (sampleInd = 0; sampleInd < playBackSamples; ++sampleInd, ++ptr)
+                    (*ptr) *= audioVolumeChannel[sampleInd % m_audioFormat.m_channelsNb];
+                break;
+            }
+        case AV_SAMPLE_FMT_S32:
+            {
+                int32_t *           ptr = (int32_t *)buffer;
+                for (sampleInd = 0; sampleInd < playBackSamples; ++sampleInd, ++ptr)
+                    (*ptr) *= audioVolumeChannel[sampleInd % m_audioFormat.m_channelsNb];
+                break;
+            }
+        case AV_SAMPLE_FMT_FLT:
+            {
+                float *             ptr = (float *)buffer;
+                for (sampleInd = 0; sampleInd < playBackSamples; ++sampleInd, ++ptr)
+                    (*ptr) *= audioVolumeChannel[sampleInd % m_audioFormat.m_channelsNb];
+                break;
+            }
+        };
+    }
+    //
     // Signal thread that audio needs new samples
-    // To avoid overloading the grabbing thread, signal when free space more than half of buffer-size
+    // To avoid overloading the grabbing thread, signals when free space more than half of buffer-size
     //
     if (m_audio_buffer.freeSpaceSize() > m_audio_buffer.size() / 2)
         m_threadLocker.signal();
@@ -430,7 +502,6 @@ FFmpegLibAvStreamImpl::run()
         bool                audioBufferFull;
         //
         bool                isPlaybackStarted   = false;
-        unsigned int        necAudioSpace       = minBlockSize; // may take only two valus: 1) minBlockSize 2) m_audio_buffer.size() / 2
         while (m_shadowThreadStop == false)
         {
             unsigned int    videoWriteFlag = 0;
@@ -442,29 +513,8 @@ FFmpegLibAvStreamImpl::run()
             if (isHasAudio() && pAudioData != NULL)
             {
                 const unsigned int space_audio_size = m_audio_buffer.freeSpaceSize();
-                // Optimizing for grabbing audio:
-                //
-                // 1. If audio buffer almost full, thread stops grabbing audio, to put more time for grabbing video
-                // 2. If audio buffer free for grabbing more than at half, (re)starts grabbing audio
-                if (necAudioSpace == minBlockSize)
-                {
-                    // Audio buffer is overfull
-                    if (space_audio_size < necAudioSpace)
-                    {
-                        // fprintf (stdout, "Audio buffer is overfull\n");
-                        necAudioSpace = m_audio_buffer.size() / 2;
-                    }
-                }
-                else
-                {
-                    // Big part of audio-buffer is empty. Now it may be forced to overfull
-                    if (space_audio_size > necAudioSpace)
-                    {
-                        // fprintf (stdout, "Audio buffer forced to overfull\n");
-                        necAudioSpace = minBlockSize;
-                    }
-                }
-                if (space_audio_size > necAudioSpace && m_audio_buffering_finished == false)
+
+                if (space_audio_size > minBlockSize && m_audio_buffering_finished == false)
                 {
                     double  max_avail_time_micros = -1.0;
                     //
@@ -485,14 +535,11 @@ FFmpegLibAvStreamImpl::run()
                         const double audio_bufferedRatio    = (double)(m_audio_buffer.size() - space_audio_size) / (double)m_audio_buffer.size();
                         if (audio_bufferedRatio > 0.25)
                         {
-                            // 25% - limited by time for 100 video frame time
-                            // 50% - limited by time for 1/4 video frame time
                             const double video_frameTimeSec = 1.0 / m_frame_rate;
-                            //
-                            double coeff = 100.0 - (audio_bufferedRatio - 0.25)*(99.75/0.25);
-                            if (coeff < DBL_MIN)
-                                coeff = DBL_MIN;
-                            max_avail_time_micros = video_frameTimeSec * coeff * 1000000.0;
+
+                                                                          // audio_bufferedRatio:      0.25 ... 0.5       ... 1.0
+                            double coeff = 0.25 / (audio_bufferedRatio - 0.25 + DBL_MIN) - 0.333;   // +INF ... 0.7       ... 0.0
+                            max_avail_time_micros = video_frameTimeSec * coeff * 1000000.0;         // +INF ... frame*0.7 ... 0
                         }
                         else
                         {

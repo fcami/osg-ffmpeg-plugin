@@ -481,7 +481,7 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
             {
                 if(m_packet.dts != AV_NOPTS_VALUE)
                 {
-                    pts = m_packet.dts;
+                    pts = m_packet.dts; // Some tests shows negative value
                 }
                 else
                 {
@@ -495,7 +495,8 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
             isDecodedData = true;
 
             continue_read_packets = false;
-            if (decodeTillMinReqTime == true && pts*1000.0 < minReqTimeMS)
+            if (decodeTillMinReqTime == true &&
+                (minReqTimeMS > 0 && pts*1000.0 < minReqTimeMS)) // should have (minReqTimeMS > 0) because pts could be negative
             {
                 continue_read_packets = true;
             }
@@ -547,14 +548,17 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
             continue_read_packets = false;
             if (decodeTillMinReqTime == false) // Check condition for continue searching by min required time without decoding
             {
-                if (m_packet.stream_index == m_videoStreamIndex && minReqTimeMS >= 0.0)
+                if (m_packet.stream_index == m_videoStreamIndex && minReqTimeMS > 0.0)
                 {
                     if(m_packet.dts != AV_NOPTS_VALUE)
                     {
                         const double frame_time_pos_ms = m_packet.dts * av_q2d(m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base) * 1000;
 
-                        if (frame_time_pos_ms < minReqTimeMS)
-                            continue_read_packets = true; // read next
+                        if (minReqTimeMS > 0.0 &&
+                            frame_time_pos_ms < minReqTimeMS)
+                        {
+                            continue_read_packets = true; // read next packet without decoding
+                        }
                     }
                 }
             }

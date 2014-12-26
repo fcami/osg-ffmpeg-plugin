@@ -26,6 +26,7 @@ private:
     osg::ref_ptr<osg::AudioSink>    m_audio_sink; // owned by this object
     long                            m_audioIndex;
     AudioFormat                     m_audioFormat;
+    float                           m_audioBalance; // balance of the audio: -1 = left, 0 = center,  1 = right
     const unsigned char             m_AudioBufferTimeSec;
     AudioBuffer                     m_audio_buffer;
     unsigned long                   m_ellapsedAudioMicroSec;
@@ -67,6 +68,9 @@ public:
     virtual const bool              isHasAudio() const;
     virtual void                    setAudioVolume(const float &);
     virtual const float             getAudioVolume() const;
+    // balance of the audio: -1 = left, 0 = center,  1 = right
+    virtual const float             getAudioBalance() const;
+    virtual void                    setAudioBalance(const float & balance);
     virtual void                    GetAudio(void * buffer, int bytesLength);
     virtual const unsigned long     GetAudioPlaybackTime() const;
     //

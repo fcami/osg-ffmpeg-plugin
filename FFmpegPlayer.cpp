@@ -153,6 +153,16 @@ float FFmpegPlayer::getVolume() const
     return m_streamer.getAudioVolume();
 }
 
+float FFmpegPlayer::getAudioBalance()
+{
+    return m_streamer.getAudioBalance();
+}
+
+void FFmpegPlayer::setAudioBalance(float balance)
+{
+    m_streamer.setAudioBalance(balance);
+}
+
 double FFmpegPlayer::getCreationTime() const
 {
     // V/A readers operate with time-values, based on ZERO time-point.

@@ -36,6 +36,10 @@ public:
     virtual void                setVolume(float volume);
     virtual float               getVolume() const;
 
+    // balance of the audio: -1 = left, 0 = center,  1 = right
+    virtual float               getAudioBalance();
+    virtual void                setAudioBalance(float balance);
+
     virtual double              getCreationTime() const;
     virtual double              getLength() const;
     virtual double              getReferenceTime () const; 

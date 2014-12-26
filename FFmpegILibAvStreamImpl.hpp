@@ -32,6 +32,9 @@ public:
     virtual const bool              isHasAudio() const = 0;
     virtual void                    setAudioVolume(const float &) = 0;
     virtual const float             getAudioVolume() const = 0;
+    // balance of the audio: -1 = left, 0 = center,  1 = right
+    virtual const float             getAudioBalance() const = 0;
+    virtual void                    setAudioBalance(const float & balance) = 0;
     virtual void                    GetAudio(void * buffer, int bytesLength) = 0;
     // Return audio playback time in ms
     virtual const unsigned long     GetAudioPlaybackTime() const = 0;

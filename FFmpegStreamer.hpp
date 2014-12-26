@@ -36,6 +36,9 @@ public:
     //
     void                    setAudioVolume(const float &);
     const float             getAudioVolume() const;
+    // balance of the audio: -1 = left, 0 = center,  1 = right
+    const float             getAudioBalance() const;
+    void                    setAudioBalance(const float & balance);
     //
     void                    play();
     void                    pause();
