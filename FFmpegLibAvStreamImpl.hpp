@@ -26,6 +26,8 @@ private:
     osg::ref_ptr<osg::AudioSink>    m_audio_sink; // owned by this object
     long                            m_audioIndex;
     AudioFormat                     m_audioFormat;
+    bool                            m_isAudioSinkImplementsVolumeControl;
+    float                           m_audioVolumeAlternative; // if audioSink does not implements setVolume() & getVolume() (see \m_isAudioSinkImplementsVolumeControl) use this variable
     float                           m_audioBalance; // balance of the audio: -1 = left, 0 = center,  1 = right
     const unsigned char             m_AudioBufferTimeSec;
     AudioBuffer                     m_audio_buffer;
@@ -43,6 +45,7 @@ private:
     FFmpegPlayer *                  m_pPlayer;
     volatile bool                   m_shadowThreadStop;
     const bool                      isPlaybackFinished();
+    const bool                      detectIsItImplementedAudioVolume();
     void                            preRun();
     void                            startPlayback();
     virtual void                    run ();

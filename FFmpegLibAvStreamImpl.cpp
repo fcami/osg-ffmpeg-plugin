@@ -11,6 +11,7 @@ namespace osgFFmpeg
 FFmpegLibAvStreamImpl::FFmpegLibAvStreamImpl()
 :m_AudioBufferTimeSec(6),
 m_ellapsedAudioMicroSec(0),
+m_audioVolumeAlternative(1.0f),
 m_audioBalance(0.0f),
 m_loop(false),
 m_pPlayer(NULL)
@@ -41,6 +42,8 @@ FFmpegLibAvStreamImpl::setAudioSink(osg::AudioSink * audio_sink)
         //
         m_audio_sink->play();
         m_audio_sink->pause();
+        //
+        m_isAudioSinkImplementsVolumeControl = detectIsItImplementedAudioVolume();
     }
 }
 
@@ -162,11 +165,35 @@ FFmpegLibAvStreamImpl::ElapsedMilliseconds() const
     return m_playerTimer.ElapsedMilliseconds();
 }
 
+const bool
+FFmpegLibAvStreamImpl::detectIsItImplementedAudioVolume()
+{
+    bool    result = false;
+    if (m_audio_sink.valid())
+    {
+        const float prevAudioVolume = m_audio_sink->getVolume();
+
+        m_audio_sink->setVolume(0.3f);
+        if ((m_audio_sink->getVolume() - 0.3f) > 1.e-3)
+            result = true;
+
+        m_audio_sink->setVolume(0.9f);
+        if ((m_audio_sink->getVolume() - 0.9f) > 1.e-3)
+            result = true;
+
+        // Return previous audio volume
+        m_audio_sink->setVolume(prevAudioVolume);
+    }
+    return result;
+}
+
+
 void
 FFmpegLibAvStreamImpl::setAudioVolume(const float & volume)
 {
     if (m_audio_sink.valid())
     {
+        m_audioVolumeAlternative = volume;
         m_audio_sink->setVolume(volume);
     }
 }
@@ -176,7 +203,10 @@ FFmpegLibAvStreamImpl::getAudioVolume() const
 {
     if (m_audio_sink.valid())
     {
-        return m_audio_sink->getVolume();
+        if (m_isAudioSinkImplementsVolumeControl == true)
+            return m_audio_sink->getVolume();
+        else
+            return m_audioVolumeAlternative;
     }
     return 0.0f;
 }
@@ -220,7 +250,9 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
         unsigned char       chInd;
         const unsigned long playBackSamples             = playbackBytes / m_audioFormat.m_bytePerSample;
         // [0..1]
-        const float         audioMaterVolume            = m_audio_sink->getVolume();
+        // Warning: Do not forget implement functions "setVolume(float)" and "float getVolume() const"
+        // for subclass of AudioSink.
+        const float         audioMaterVolume            = getAudioVolume ();
         // balance of the audio: -1 = left, 0 = center,  1 = right
         const float         audioBallance               = m_audioBalance;
         //
