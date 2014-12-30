@@ -10,7 +10,9 @@ extern "C"
 #include <stdint.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-// #include <libavutil/channel_layout.h> // this file exist not for any ver of ffmpeg. But necessary definitions could be accessed via common files /avcodec.h or /avformat.h
+#ifndef AV_CH_LAYOUT_STEREO
+	#include <libavutil/channel_layout.h> // Appears to be needed specifically for versions on some Linux distros
+#endif
 
 #ifndef ANDROID
 #include <libavdevice/avdevice.h>

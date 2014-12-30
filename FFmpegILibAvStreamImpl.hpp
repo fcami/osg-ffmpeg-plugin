@@ -4,7 +4,7 @@
 namespace osg {
 
     class AudioSink;
-}; // namespace osg
+} // namespace osg
 
 namespace osgFFmpeg {
 
