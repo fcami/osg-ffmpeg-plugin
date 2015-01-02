@@ -100,10 +100,6 @@ FFmpegFileHolder::open (const std::string & filename, FFmpegParameters* paramete
             //
             m_audioFormat.m_bytePerSample   = 2;
             m_audioFormat.m_avSampleFormat  = AV_SAMPLE_FMT_S16;
-            //
-            // Limit output by Stereo
-            if (m_audioFormat.m_channelsNb > 2)
-                m_audioFormat.m_channelsNb  = 2;
         }
         //
         // Open For Video

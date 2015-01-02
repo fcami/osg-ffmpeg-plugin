@@ -19,6 +19,37 @@ private:
 #ifdef USE_SWRESAMPLE
     SwrContext *            m_audio_swr_cntx;
 #else
+//
+// From the sources of libavcodec conclude, that struct ReSampleContext available till
+// major version of libavcodec less than 57. Moreover, ffmpeg suggests to use another library libswresample
+// because ReSampleContext is deprecated and will be removed since major version of libavcodec 57.
+//
+// See: libavcodec\version.h:
+//
+// #ifndef FF_API_AUDIO_CONVERT
+// #define FF_API_AUDIO_CONVERT     (LIBAVCODEC_VERSION_MAJOR < 57)
+// #endif
+// ...
+// #ifndef FF_API_AVCODEC_RESAMPLE
+// #define FF_API_AVCODEC_RESAMPLE  FF_API_AUDIO_CONVERT
+// #endif
+//
+// See: libavcodec\avcodec.h:
+//
+// #if FF_API_AVCODEC_RESAMPLE
+// /**
+//  * @defgroup lavc_resample Audio resampling
+//  * @ingroup libavc
+//  * @deprecated use libswresample instead
+//  *
+//  * @{
+//  */
+// struct ReSampleContext;
+// struct AVResampleContext;
+//
+// typedef struct ReSampleContext ReSampleContext;
+// ...
+
     ReSampleContext *       m_audio_resample_cntx;
     ReSampleContext *       m_audio_intermediate_resample_cntx;
 #endif

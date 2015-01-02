@@ -64,7 +64,16 @@ osg::AudioStream::SampleFormat
 FFmpegAudioStream::audioSampleFormat() const
 {
     osg::AudioStream::SampleFormat  result;
-
+    //
+    // see: https://www.ffmpeg.org/doxygen/2.5/group__lavu__sampfmts.html#details
+    //
+    // "The data described by the sample format is always in native-endian order.
+    //  Sample values can be expressed by native C types, hence the lack of a signed 24-bit sample format
+    //  even though it is a common raw audio data format."
+    //
+    // So, even if some file contains audio with 24-bit samples,
+    // ffmpeg converts it to available AV_SAMPLE_FMT_S32 automatically
+    //
     switch (m_pFileHolder->getAudioFormat().m_avSampleFormat)
     {
     case AV_SAMPLE_FMT_U8:

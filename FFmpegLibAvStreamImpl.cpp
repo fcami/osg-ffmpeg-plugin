@@ -66,10 +66,10 @@ FFmpegLibAvStreamImpl::initialize(const FFmpegFileHolder * pHolder, FFmpegPlayer
     if (isHasAudio())
     {
         m_audioFormat = pHolder->getAudioFormat();
-        
+
         if (m_audio_buffer.alloc ( m_audioFormat.m_sampleRate *
                                         m_audioFormat.m_channelsNb *
-                                        m_audioFormat.m_bytePerSample * 
+                                        m_audioFormat.m_bytePerSample *
                                         m_AudioBufferTimeSec) < 0)
         {
             m_audioFormat.clear();
@@ -83,7 +83,7 @@ FFmpegLibAvStreamImpl::initialize(const FFmpegFileHolder * pHolder, FFmpegPlayer
     if (isHasVideo())
     {
         m_frame_rate = pHolder->frameRate();
-        
+
         if (m_video_buffer.alloc(pHolder) < 0)
         {
             m_video_buffer.release();
@@ -259,10 +259,10 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
         float               audioVolumeChannel[128];
         audioVolumeChannel[0] = audioMaterVolume - ((audioBallance > 0.0f) ? (audioBallance * audioMaterVolume) : 0.0f);
         audioVolumeChannel[1] = audioMaterVolume + ((audioBallance < 0.0f) ? (audioBallance * audioMaterVolume) : 0.0f);
-        audioVolumeChannel[2] = 0.0f;
-        audioVolumeChannel[3] = 0.0f;
-        audioVolumeChannel[4] = 0.0f;
-        audioVolumeChannel[5] = 0.0f;
+        audioVolumeChannel[2] = audioMaterVolume;
+        audioVolumeChannel[3] = audioMaterVolume;
+        audioVolumeChannel[4] = audioVolumeChannel[0];
+        audioVolumeChannel[5] = audioVolumeChannel[1];
 
         switch (m_audioFormat.m_avSampleFormat)
         {
@@ -396,11 +396,11 @@ FFmpegLibAvStreamImpl::preRun()
         if (m_audio_sink.valid())
         {
             m_ellapsedAudioMicroSec = elapsedTimeMS * 1000;
-        
+
             if (m_isNeedFlushBuffers == true)
             {
                 FFmpegWrapper::seekAudio(m_audioIndex, elapsedTimeMS);
-                
+
                 m_audio_buffer.flush();
             }
 
@@ -456,8 +456,8 @@ FFmpegLibAvStreamImpl::postRun()
     }
     //
     // If buffering finished, reset pointer to start position
-    // 
-    if (m_audio_buffering_finished == true && m_video_buffer.isStreamFinished())
+    //
+    if (isPlaybackFinished())
     {
         // V/A readers operate with time-values, based on ZERO time-point.
         // So here we reset timer by 0.
@@ -465,7 +465,7 @@ FFmpegLibAvStreamImpl::postRun()
         m_playerTimer.Reset();
         m_playerTimer.ElapsedMilliseconds (0);
         m_ellapsedAudioMicroSec = 0;
-        
+
         if (m_pPlayer)
         {
             m_pPlayer->pause();
@@ -523,7 +523,7 @@ FFmpegLibAvStreamImpl::run()
 
     // Minimal samples for time-period passed by one frame multiplied by two(speed of filling audio buffer should be faster than audio playback),
     // limited by 32767 as restriction of ffmpeg-wrapper
-    const unsigned short    samplesPart = std::min((double)32767, (double)(m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb * m_audioFormat.m_sampleRate) / m_frame_rate * 2); 
+    const unsigned short    samplesPart = std::min((double)32767, (double)(m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb * m_audioFormat.m_sampleRate) / m_frame_rate * 2);
     const unsigned int      minBlockSize = samplesPart * m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb;
     unsigned char *         pAudioData = minBlockSize > 0 ? new unsigned char[minBlockSize * 2] : NULL; // ... * 2], because it could read more than minBlockSize
     try
