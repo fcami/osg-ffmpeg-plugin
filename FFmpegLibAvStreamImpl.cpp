@@ -17,7 +17,7 @@ m_loop(false),
 m_pPlayer(NULL)
 {
 }
-    
+
 FFmpegLibAvStreamImpl::~FFmpegLibAvStreamImpl()
 {
     stopShadowThread();
@@ -130,6 +130,9 @@ FFmpegLibAvStreamImpl::Start()
 {
     if (isRunning() == false)
     {
+        // To avoid thread concurent conflicts, follow param should be
+        // defined from parent thread
+        m_shadowThreadStop = false;
         // start thread
         start();
     }
@@ -153,6 +156,9 @@ FFmpegLibAvStreamImpl::Stop()
 void
 FFmpegLibAvStreamImpl::Seek(const unsigned long & newTimeMS)
 {
+    if (isRunning())
+        Pause();
+
     m_isNeedFlushBuffers = true;
     m_playerTimer.Reset();
     m_playerTimer.ElapsedMilliseconds (newTimeMS);
@@ -193,8 +199,10 @@ FFmpegLibAvStreamImpl::setAudioVolume(const float & volume)
 {
     if (m_audio_sink.valid())
     {
-        m_audioVolumeAlternative = volume;
-        m_audio_sink->setVolume(volume);
+        const float trimmed_volume = std::min(1.0f, std::max(0.0f, volume));
+        //
+        m_audioVolumeAlternative = trimmed_volume;
+        m_audio_sink->setVolume(trimmed_volume);
     }
 }
 
@@ -214,19 +222,20 @@ FFmpegLibAvStreamImpl::getAudioVolume() const
 const float
 FFmpegLibAvStreamImpl::getAudioBalance() const
 {
-    return m_audioBalance;
+    if (m_audio_sink.valid())
+    {
+        return m_audioBalance;
+    }
+    return 0.0f;
 }
 
 void
 FFmpegLibAvStreamImpl::setAudioBalance(const float & balance)
 {
-    m_audioBalance = balance;
-
-    if (m_audioBalance > 1.0f)
-        m_audioBalance = 1.0f;
-
-    if (m_audioBalance < -1.0f)
-        m_audioBalance = -1.0f;
+    if (m_audio_sink.valid())
+    {
+        m_audioBalance = std::min(1.0f, std::max(-1.0f, balance));
+    }
 }
 
 const bool
@@ -242,7 +251,7 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
     //
     const double            playbackSec = (double)playbackBytes / (double)(m_audioFormat.m_sampleRate * m_audioFormat.m_bytePerSample * m_audioFormat.m_channelsNb);
     //
-    // Multiply samples by master volume
+    // Multiply samples by master/balanced volume
     //
     if (m_audio_sink.valid())
     {
@@ -528,7 +537,6 @@ FFmpegLibAvStreamImpl::run()
     unsigned char *         pAudioData = minBlockSize > 0 ? new unsigned char[minBlockSize * 2] : NULL; // ... * 2], because it could read more than minBlockSize
     try
     {
-        m_shadowThreadStop = false;
         //
         bool                videoBufferFull;
         bool                audioBufferFull;
