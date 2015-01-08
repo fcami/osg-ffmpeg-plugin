@@ -97,7 +97,7 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
 //??? not works: #if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(53, 2, 0)
 //
 // Answer: http://sourceforge.net/p/cmus/mailman/message/28014386/
-// "It seems ffmpeg development is completely mad, although their APIchanges file says 
+// "It seems ffmpeg development is completely mad, although their APIchanges file says
 // avcodec_open2() is there from version 53.6.0 (and this is true for the git checkout),
 // they somehow managed to not include it in their official 0.8.2 release, which has
 // version 53.7.0 (!)."
@@ -151,12 +151,15 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
     **/
     pCodecCtx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
     pCodecCtx->thread_count = 1;
+#ifdef USE_AV_LOCK_MANAGER
+    pCodecCtx->thread_count = 2;
+#endif // USE_AV_LOCK_MANAGER
 // see: https://gitorious.org/libav/libav/commit/0b950fe240936fa48fd41204bcfd04f35bbf39c3
 // "introduce avcodec_open2() as a replacement for avcodec_open()."
 //??? not works: #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(53, 5, 0)
 //
 // Answer: http://sourceforge.net/p/cmus/mailman/message/28014386/
-// "It seems ffmpeg development is completely mad, although their APIchanges file says 
+// "It seems ffmpeg development is completely mad, although their APIchanges file says
 // avcodec_open2() is there from version 53.6.0 (and this is true for the git checkout),
 // they somehow managed to not include it in their official 0.8.2 release, which has
 // version 53.7.0 (!)."
@@ -225,7 +228,7 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
         };
 #endif // OSG_ABLE_PLANAR_AUDIO
     }
-    
+
     //
     return 0;
 }

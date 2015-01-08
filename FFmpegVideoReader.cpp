@@ -150,7 +150,9 @@ FFmpegVideoReader::openFile(const char *filename,
     **/
     pCodecCtx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
     pCodecCtx->thread_count = 1;
-    //
+#ifdef USE_AV_LOCK_MANAGER
+    pCodecCtx->thread_count = 4;
+#endif // USE_AV_LOCK_MANAGER
 // see: https://gitorious.org/libav/libav/commit/0b950fe240936fa48fd41204bcfd04f35bbf39c3
 // "introduce avcodec_open2() as a replacement for avcodec_open()."
 //??? not works: #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(53, 5, 0)
