@@ -2,6 +2,7 @@
 #include "FFmpegWrapper.hpp"
 #include <limits>
 
+size_t getMemorySize();
 
 namespace osgFFmpeg
 {
@@ -81,7 +82,12 @@ VideoVectorBuffer::alloc(const FFmpegFileHolder * pHolder)
             ScopedLock  lock (m_mutex);
 
             m_frameSize = 3 * pHolder->width() * pHolder->height();
-            m_pool.alloc(m_frameSize, 100);
+
+            const size_t    partOfPhysicMemorySizeInBytes = floor((double)getMemorySize() / 4.0); // could return 0
+            const size_t    available_frame_nb = partOfPhysicMemorySizeInBytes > 0 ? (std::min<size_t>(20, floor((double)partOfPhysicMemorySizeInBytes / (double)m_frameSize))) : 20;
+
+            m_pool.alloc(m_frameSize, available_frame_nb);
+
             fprintf (stdout, "Video allocs pool for %d frames\n", m_pool.FrameCount());
             //
             // Determine time-stamp between frames
@@ -100,7 +106,7 @@ VideoVectorBuffer::alloc(const FFmpegFileHolder * pHolder)
     return err;
 }
 
-void 
+void
 VideoVectorBuffer::release()
 {
     ScopedLock  lock (m_mutex);
@@ -113,14 +119,20 @@ VideoVectorBuffer::release()
 * If Return value is 0(No error, and ptr are active), user SHOULD call ReleaseFoundFrame()
 * to release memory. Before calling ReleaseFoundFrame(), user may use returned ptr with guaranty
 * to frame do not changed by other/shadow threads.
-* 
+*
 * DO NOT FORGET CALL ReleaseFoundFrame() WHEN GetFramePtr() CALLED.
 * DO NOT CALL GetFramePtr() TWICE. ALWAYS CALL ReleaseFoundFrame() AFTER EACH CALLING GetFramePtr().
-* 
+*
 */
 const int
 VideoVectorBuffer::GetFramePtr(const unsigned long & msTime, unsigned char *& pArray)
 {
+    if (m_fileIndex < 0)
+        return -1;
+
+    if (msTime >= m_videoLength)
+        return -1;
+
     ScopedLock  lock (m_mutex);
 /*
     //
@@ -148,8 +160,6 @@ VideoVectorBuffer::GetFramePtr(const unsigned long & msTime, unsigned char *& pA
     pArray = NULL;
     m_bufferGrabPtrEnd_found = m_bufferGrabPtrEnd;
 
-    if (m_fileIndex < 0)
-        return -1;
     //
     //
     //
@@ -251,7 +261,7 @@ VideoVectorBuffer::GetFramePtr(const unsigned long & msTime, unsigned char *& pA
                 m_forcedFrameTimeMS = m_videoLength - frameDurationMS;
             //
             //return -(frameDurationMS + (msTime - maxT))/frameDurationMS;
-        
+
 
             // Use nearest (in time domain) frame
             pArray = m_pool.m_ptr [ m_timeMappingList[ui_maxT].Ptr ];
@@ -279,9 +289,8 @@ VideoVectorBuffer::ReleaseFoundFrame()
     m_bufferGrabPtrEnd = m_bufferGrabPtrEnd_found;
 }
 
-
-const bool
-VideoVectorBuffer::isBufferFull()
+const unsigned int
+VideoVectorBuffer::freeSpaceSize() const
 {
     ScopedLock  lock (m_mutex);
 
@@ -289,13 +298,25 @@ VideoVectorBuffer::isBufferFull()
                         (m_bufferGrabPtrEnd - m_bufferGrabPtrStart) :
                         m_pool.FrameCount() - (m_bufferGrabPtrStart - m_bufferGrabPtrEnd);
 
+    return bufferFreeSize;
+}
+
+const unsigned int
+VideoVectorBuffer::size() const
+{
+    return m_pool.FrameCount();
+}
+
+const bool
+VideoVectorBuffer::isBufferFull()
+{
     //
     // Important:
     //
     // condition \(bufferFreeSize <= 2) should be "<= 2"
     // because it guaranty that view-frame(pointed by \m_bufferGrabPtrEnd) will not be rewrited by grabber
     //
-    return (bufferFreeSize <= 2);
+    return (freeSpaceSize() <= 2);
 }
 
 void
@@ -309,29 +330,31 @@ VideoVectorBuffer::setStreamFinished(const bool value)
 const bool
 VideoVectorBuffer::isStreamFinished()
 {
-    ScopedLock  lock (m_mutex);
+    // Should not be locked, because it used in this class where wrapped by m_mutex
+    // ScopedLock  lock (m_mutex);
 
     return m_video_buffering_finished;
 }
 
 void
-VideoVectorBuffer::writeFrame(const unsigned int & flag)
+VideoVectorBuffer::writeFrame(const unsigned int & flag, const size_t & drop_frame_nb)
 {
     // Fix local value of cross-thread params
     unsigned int    loc_bufferGrabPtrStart = m_bufferGrabPtrStart;
 
     if (loc_bufferGrabPtrStart == m_pool.FrameCount())
         loc_bufferGrabPtrStart = 0;
-    
+
 
     double timeStampSec;
     const short result = FFmpegWrapper::getNextImage (m_fileIndex,
                                                     m_pool.m_ptr[loc_bufferGrabPtrStart],
                                                     timeStampSec,
+                                                    drop_frame_nb,
                                                     (flag & 1) ? false : true,
                                                     m_forcedFrameTimeMS);
 
-    
+
     if (result == 0)
     {
         ScopedLock  lock (m_mutex);

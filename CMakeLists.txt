@@ -46,6 +46,7 @@ SET(TARGET_SRC
     FFmpegWrapper.cpp
     ReaderWriterFFmpeg2.cpp
     VideoVectorBuffer.cpp
+    System_routine.cpp
 )
 
 SET(TARGET_H

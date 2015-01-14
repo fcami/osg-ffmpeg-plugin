@@ -9,11 +9,11 @@ namespace osgFFmpeg
 {
 
 FFmpegLibAvStreamImpl::FFmpegLibAvStreamImpl()
-:m_AudioBufferTimeSec(6),
-m_ellapsedAudioMicroSec(0),
+:m_loop(false),
 m_audioVolumeAlternative(1.0f),
 m_audioBalance(0.0f),
-m_loop(false),
+m_AudioBufferTimeSec(6),
+m_ellapsedAudioMicroSec(0),
 m_pPlayer(NULL)
 {
 }
@@ -122,12 +122,23 @@ FFmpegLibAvStreamImpl::loop() const
 const unsigned long
 FFmpegLibAvStreamImpl::GetAudioPlaybackTime() const
 {
-    return (m_ellapsedAudioMicroSec < m_audioDelayMicroSec) ? 0 : (m_ellapsedAudioMicroSec - m_audioDelayMicroSec)/1000;
+    ScopedLock  lock (m_mutex);
+
+    const unsigned long actual_offset_micros = (m_ellapsedAudioMicroSecOffsetInitial > 0) ? (m_ellapsedAudioMicroSecOffsetTimer.time_u() - m_ellapsedAudioMicroSecOffsetInitial) : 0;
+    const unsigned long actual_value_ms = ((m_ellapsedAudioMicroSec - m_audioDelayMicroSec + actual_offset_micros)/1000);
+
+    return (m_ellapsedAudioMicroSec < m_audioDelayMicroSec) ? 0 : actual_value_ms;
 }
 
 void
 FFmpegLibAvStreamImpl::Start()
 {
+    //
+    // Guaranty that thread will starts even if it was run before
+    //
+    if (isRunning() == true)
+        Pause();
+
     if (isRunning() == false)
     {
         // To avoid thread concurent conflicts, follow param should be
@@ -151,6 +162,7 @@ FFmpegLibAvStreamImpl::Stop()
     //
     m_playerTimer.Reset();
     m_ellapsedAudioMicroSec = 0;
+    m_ellapsedAudioMicroSecOffsetInitial = 0;
 }
 
 void
@@ -163,6 +175,7 @@ FFmpegLibAvStreamImpl::Seek(const unsigned long & newTimeMS)
     m_playerTimer.Reset();
     m_playerTimer.ElapsedMilliseconds (newTimeMS);
     m_ellapsedAudioMicroSec = newTimeMS * 1000;
+    m_ellapsedAudioMicroSecOffsetInitial = 0;
 }
 
 const unsigned long
@@ -256,7 +269,6 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
     if (m_audio_sink.valid())
     {
         unsigned long       sampleInd;
-        unsigned char       chInd;
         const unsigned long playBackSamples             = playbackBytes / m_audioFormat.m_bytePerSample;
         // [0..1]
         // Warning: Do not forget implement functions "setVolume(float)" and "float getVolume() const"
@@ -312,7 +324,12 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
     if (m_audio_buffer.freeSpaceSize() > m_audio_buffer.size() / 2)
         m_threadLocker.signal();
 
-    m_ellapsedAudioMicroSec += playbackSec * 1000000.0;
+    {
+        ScopedLock  lock (m_mutex);
+
+        m_ellapsedAudioMicroSec += playbackSec * 1000000.0;
+        m_ellapsedAudioMicroSecOffsetInitial = m_ellapsedAudioMicroSecOffsetTimer.time_u();
+    }
     //
     // Important:
     //
@@ -394,7 +411,7 @@ FFmpegLibAvStreamImpl::preRun()
 {
     const unsigned long elapsedTimeMS = m_playerTimer.ElapsedMilliseconds ();
     m_ellapsedAudioMicroSec = 0;
-
+    m_ellapsedAudioMicroSecOffsetInitial = 0;
     //
     // Prepare Audio to streaming
     //
@@ -462,6 +479,7 @@ FFmpegLibAvStreamImpl::postRun()
         m_playerTimer.Reset();
         m_playerTimer.ElapsedMilliseconds (m_ellapsedAudioMicroSec / 1000.0);
         m_ellapsedAudioMicroSec = 0;
+        m_ellapsedAudioMicroSecOffsetInitial = 0;
     }
     //
     // If buffering finished, reset pointer to start position
@@ -474,6 +492,7 @@ FFmpegLibAvStreamImpl::postRun()
         m_playerTimer.Reset();
         m_playerTimer.ElapsedMilliseconds (0);
         m_ellapsedAudioMicroSec = 0;
+        m_ellapsedAudioMicroSecOffsetInitial = 0;
 
         if (m_pPlayer)
         {
@@ -499,7 +518,7 @@ FFmpegLibAvStreamImpl::startPlayback()
         m_audio_sink->play();
     }
     if (isHasVideo())
-        m_renderer.start();
+        m_renderer.Start();
 }
 
 const bool
@@ -542,6 +561,7 @@ FFmpegLibAvStreamImpl::run()
         bool                audioBufferFull;
         //
         bool                isPlaybackStarted   = false;
+        size_t              drop_frame_nb = 0;
         while (m_shadowThreadStop == false)
         {
             unsigned int    videoWriteFlag = 0;
@@ -615,7 +635,17 @@ FFmpegLibAvStreamImpl::run()
                 if (m_video_buffer.isBufferFull() == false &&
                     m_video_buffer.isStreamFinished() == false)
                 {
-                    m_video_buffer.writeFrame (videoWriteFlag);
+                    //
+                    // Provide little acceleration for video grabbing
+                    // Test shows, that 20-frame buffer accelerated enough by 1-frame dropping in half of the buffer-size.
+                    //
+                    if (isPlaybackStarted && m_video_buffer.isStreamFinished() == false)
+                    {
+                        double aspect = (double)m_video_buffer.freeSpaceSize() / (double)m_video_buffer.size();
+                        drop_frame_nb = aspect * 2;
+                    }
+                    m_video_buffer.writeFrame (videoWriteFlag, drop_frame_nb);
+
                     videoBufferFull = false;
                 }
             }

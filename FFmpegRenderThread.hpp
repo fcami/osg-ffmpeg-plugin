@@ -9,7 +9,7 @@ namespace osgFFmpeg {
 
 class FFmpegILibAvStreamImpl;
 
-class FFmpegRenderThread : public OpenThreads::Thread
+class FFmpegRenderThread : protected OpenThreads::Thread
 {
     osg::ImageStream            * m_pImgStream;
     FFmpegILibAvStreamImpl      * m_pLibAvStream;
@@ -24,6 +24,7 @@ public:
 
     const int                   Initialize(FFmpegILibAvStreamImpl *, osg::ImageStream *, const Size &);
 
+    void                        Start();
     void                        Stop();
 };
 

@@ -36,6 +36,17 @@ void FFmpegAudioStream::setAudioSink(osg::AudioSink* audio_sink)
 
 void FFmpegAudioStream::consumeAudioBuffer(void * const buffer, const size_t size)
 {
+    //
+    // Inform consume audio buffer size
+    //
+    static double        playbackSec = -1.0;
+    if (playbackSec < 0.0 && size > 0 && m_pFileHolder)
+    {
+        const AudioFormat   audioFormat = m_pFileHolder->getAudioFormat();
+        playbackSec = (double)size / (double)(audioFormat.m_sampleRate * audioFormat.m_bytePerSample * audioFormat.m_channelsNb);
+        OSG_NOTICE << "Consumed audio chunk: " << playbackSec << " sec" << std::endl;
+    }
+
     m_streamer->audio_fillBuffer(buffer, size);
 }
 

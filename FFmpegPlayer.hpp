@@ -10,6 +10,10 @@
 
 namespace osgFFmpeg {
 
+// This parameter should be incremented each time before commit to repository
+#define OSG_FFMPEG_PLUGIN_RELEASE_VERSION_INT   3
+
+
 template <class T>
 class MessageQueue;
 

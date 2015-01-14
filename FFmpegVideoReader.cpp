@@ -1,11 +1,13 @@
 #include "FFmpegVideoReader.hpp"
 #include "FFmpegParameters.hpp"
+#include <OpenThreads/Thread>
+#include <osg/Timer>
 #include <string>
 #include <stdexcept>
 
 namespace osgFFmpeg {
 
-#ifdef USE_SWSCALE    
+#ifdef USE_SWSCALE
     #define SWS_OSG_CONVERSION_TYPE     SWS_FAST_BILINEAR   // for case, when frames save his resolution, it is enough to use the fastest case of scaling.
 #endif
 
@@ -13,7 +15,6 @@ const int
 FFmpegVideoReader::openFile(const char *filename,
                             FFmpegParameters * parameters,
                             const bool useRGB_notBGR,
-                            const long scaledWidth,
                             float & aspectRatio,
                             float & frame_rate,
                             bool & par_alphaChannel)
@@ -45,7 +46,7 @@ FFmpegVideoReader::openFile(const char *filename,
         if (parameters)
         {
             av_dict_set(parameters->getOptions(), "video_size", "640x480", 0);
-            av_dict_set(parameters->getOptions(), "framerate", "1:30", 0);
+            av_dict_set(parameters->getOptions(), "framerate", "30:1", 0);
         }
 
         std::string format = "video4linux2";
@@ -73,7 +74,34 @@ FFmpegVideoReader::openFile(const char *filename,
             fmt_ctx->pb = context;
         }
     }
-    if ((err = avformat_open_input(&fmt_ctx, filename, iformat, &format_opts)) < 0)
+    //
+    // Parse options
+    //
+    long                    scaledWidth = 0;
+    long                    scaledHeight = 0;
+    AVRational              framerate; framerate.den = 0;
+    AVDictionaryEntry *     dictEntry;
+    AVDictionary *          dict = *parameters->getOptions();
+    //
+    dictEntry = NULL;
+    while (dictEntry = av_dict_get(dict, "video_size", dictEntry, 0))
+    {
+        int width,height;
+        if (av_parse_video_size(& width, & height, dictEntry->value) >= 0)
+        {
+            scaledWidth = width;
+            scaledHeight = height;
+        }
+    }
+    dictEntry = NULL;
+    while (dictEntry = av_dict_get(dict, "framerate", dictEntry, 0))
+    {
+        if (av_parse_video_rate(& framerate, dictEntry->value) >= 0)
+        {
+            m_framerate = framerate;
+        }
+    }
+    if ((err = avformat_open_input(&fmt_ctx, filename, iformat, parameters->getOptions())) < 0)
     {
         OSG_NOTICE << "Cannot open file " << filename << " for video" << std::endl;
         return err;
@@ -96,7 +124,7 @@ FFmpegVideoReader::openFile(const char *filename,
 //??? not works: #if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(53, 2, 0)
 //
 // Answer: http://sourceforge.net/p/cmus/mailman/message/28014386/
-// "It seems ffmpeg development is completely mad, although their APIchanges file says 
+// "It seems ffmpeg development is completely mad, although their APIchanges file says
 // avcodec_open2() is there from version 53.6.0 (and this is true for the git checkout),
 // they somehow managed to not include it in their official 0.8.2 release, which has
 // version 53.7.0 (!)."
@@ -151,14 +179,15 @@ FFmpegVideoReader::openFile(const char *filename,
     pCodecCtx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
     pCodecCtx->thread_count = 1;
 #ifdef USE_AV_LOCK_MANAGER
-    pCodecCtx->thread_count = 4;
+    pCodecCtx->thread_type = FF_THREAD_FRAME;
+    pCodecCtx->thread_count = 0; // automatically search necessary value
 #endif // USE_AV_LOCK_MANAGER
 // see: https://gitorious.org/libav/libav/commit/0b950fe240936fa48fd41204bcfd04f35bbf39c3
 // "introduce avcodec_open2() as a replacement for avcodec_open()."
 //??? not works: #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(53, 5, 0)
 //
 // Answer: http://sourceforge.net/p/cmus/mailman/message/28014386/
-// "It seems ffmpeg development is completely mad, although their APIchanges file says 
+// "It seems ffmpeg development is completely mad, although their APIchanges file says
 // avcodec_open2() is there from version 53.6.0 (and this is true for the git checkout),
 // they somehow managed to not include it in their official 0.8.2 release, which has
 // version 53.7.0 (!)."
@@ -178,23 +207,8 @@ FFmpegVideoReader::openFile(const char *filename,
     //
     if (scaledWidth > 0)
     {
-        //
-        // Only if new size is less than actual size
-        //
-        if (scaledWidth < pCodecCtx->width)
-        {
-            const double    aspect_dwdh = (double)(pCodecCtx->width) / pCodecCtx->height;
-            m_new_width = scaledWidth;
-            m_new_height = m_new_width / aspect_dwdh;
-        }
-        else
-        {
-            //
-            // Actual video size
-            //
-            m_new_width = pCodecCtx->width;
-            m_new_height = pCodecCtx->height;
-        }
+        m_new_width = scaledWidth;
+        m_new_height = scaledHeight;
     }
     else
     {
@@ -203,6 +217,37 @@ FFmpegVideoReader::openFile(const char *filename,
         //
         m_new_width = pCodecCtx->width;
         m_new_height = pCodecCtx->height;
+    }
+    if (framerate.den > 0)
+    {
+        m_framerate = framerate;
+    }
+    else
+    {
+        AVStream *      st      = m_fmt_ctx_ptr->streams[m_videoStreamIndex];
+#if LIBAVCODEC_VERSION_MAJOR >= 56
+        // Favorite source is \st->avg_frame_rate
+        // but if it not available, use alternative
+        if (st->avg_frame_rate.den == 0) // denumenator should not be eq to zero
+        {
+            m_framerate = st->r_frame_rate;
+        }
+        else
+        {
+            m_framerate = st->avg_frame_rate;
+        }
+#else
+        // Favorite source is \st->r_frame_rate
+        // but if it not available, use alternative
+        if (st->r_frame_rate.den == 0) // denumenator should not be eq to zero
+        {
+            m_framerate = st->avg_frame_rate;
+        }
+        else
+        {
+            m_framerate = st->r_frame_rate;
+        }
+#endif
     }
     //
     // Initialize duration to avoid change seek/grab-position of file in future.
@@ -234,7 +279,7 @@ FFmpegVideoReader::close(void)
         OSG_FREE_FRAME (& m_pSrcFrame);
         m_pSrcFrame = NULL;
     }
-#ifdef USE_SWSCALE    
+#ifdef USE_SWSCALE
     if (img_convert_ctx)
     {
         sws_freeContext(img_convert_ctx);
@@ -257,15 +302,12 @@ FFmpegVideoReader::close(void)
 float
 FFmpegVideoReader::findAspectRatio() const
 {
-    float ratio = 0.0f;
+    float ratio = (float)m_new_width / (float)m_new_height;
 
     AVCodecContext *pCodecCtx = m_fmt_ctx_ptr->streams[m_videoStreamIndex]->codec;
 
     if (pCodecCtx->sample_aspect_ratio.num != 0)
-        ratio = float(av_q2d(pCodecCtx->sample_aspect_ratio));
-
-    if (ratio <= 0.0f)
-        ratio = 1.0f;
+        ratio *= (float)(av_q2d(pCodecCtx->sample_aspect_ratio));
 
     return ratio;
 }
@@ -282,34 +324,7 @@ FFmpegVideoReader::alphaChannel() const
 const float
 FFmpegVideoReader::get_fps(void) const
 {
-    AVStream *      st      = m_fmt_ctx_ptr->streams[m_videoStreamIndex];
-    float           fps;
-    // Find out the framerate
-#if LIBAVCODEC_VERSION_MAJOR >= 56
-    // Favorite source is \st->avg_frame_rate
-    // but if it not available, use alternative
-    if (st->avg_frame_rate.den == 0) // denumenator should not be eq to zero
-    {
-        fps = av_q2d(st->r_frame_rate);
-    }
-    else
-    {
-        fps = av_q2d(st->avg_frame_rate);
-    }
-#else
-    // Favorite source is \st->r_frame_rate
-    // but if it not available, use alternative
-    if (st->r_frame_rate.den == 0) // denumenator should not be eq to zero
-    {
-        fps = av_q2d(st->avg_frame_rate);
-    }
-    else
-    {
-        fps = av_q2d(st->r_frame_rate);
-    }
-#endif
-
-    return fps;
+    return  av_q2d (m_framerate);
 }
 
 const int
@@ -429,6 +444,7 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
                                 AVFrame *pFrame,
                                 unsigned long & currPacketPos,
                                 double & currTime,
+                                const size_t & drop_frame_nb,
                                 const bool decodeTillMinReqTime,
                                 const double & minReqTimeMS)
 {
@@ -436,6 +452,7 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
     int                     frameFinished;
     bool                    isDecodedData   = false;
     double                  pts             = 0;
+    size_t                  drop_frame_counter = drop_frame_nb;
     //
     // First time we're called, set m_packet.data to NULL to indicate it
     // doesn't have to be freed
@@ -463,53 +480,55 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
                 fprintf(stderr, "Error while decoding frame\n");
                 return false;
             }
+            m_bytesRemaining -= bytesDecoded;
+
             //
             // We should check twice to search rezult, if first-time had not 100% successfull.
             // Some tests prove it.
             //
-            if (frameFinished == 0)
+            if (frameFinished)
             {
-                bytesDecoded = avcodec_decode_video2 (pCodecCtx, pFrame, &frameFinished, &m_packet);
-            }
-
-
-            // Save global pts to be stored in pFrame in first call
-            if (m_packet.dts == AV_NOPTS_VALUE
-                && pFrame->opaque && *(uint64_t*)pFrame->opaque != AV_NOPTS_VALUE)
-            {
-                pts = *(uint64_t *)pFrame->opaque;
-            }
-            else
-            {
-                if(m_packet.dts != AV_NOPTS_VALUE)
+                // Save global pts to be stored in pFrame in first call
+                if (m_packet.dts == AV_NOPTS_VALUE
+                    && pFrame->opaque && *(uint64_t*)pFrame->opaque != AV_NOPTS_VALUE)
                 {
-                    pts = m_packet.dts; // Some tests shows negative value
+                    pts = *(uint64_t *)pFrame->opaque;
                 }
                 else
                 {
-                    pts = 0;
+                    if(m_packet.dts != AV_NOPTS_VALUE)
+                    {
+                        pts = m_packet.dts; // Some tests shows negative value
+                    }
+                    else
+                    {
+                        pts = 0;
+                    }
                 }
-            }
 
-            pts *= av_q2d(m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
-        
-            m_bytesRemaining -= bytesDecoded;
-            isDecodedData = true;
+                pts *= av_q2d(m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
 
-            continue_read_packets = false;
-            if (decodeTillMinReqTime == true &&
-                (minReqTimeMS > 0 && pts*1000.0 < minReqTimeMS)) // should have (minReqTimeMS > 0) because pts could be negative
-            {
-                continue_read_packets = true;
-            }
-            // Did we finish the current frame? Then we can return
-            if (frameFinished && continue_read_packets == false)
-            {
+                isDecodedData = true;
+
+                continue_read_packets = false;
+                if (decodeTillMinReqTime == true &&
+                    (minReqTimeMS > 0 && pts*1000.0 < minReqTimeMS)) // should have (minReqTimeMS > 0) because pts could be negative
+                {
+                    continue_read_packets = true;
+                }
+                // Did we finish the current frame? Then we can return
+                if (frameFinished && continue_read_packets == false)
+                {
 #ifdef FFMPEG_DEBUG
-                fprintf (stdout, "pts: %f\n", pts);
+                    fprintf (stdout, "pts: %f\n", pts);
 #endif // FFMPEG_DEBUG
-                currTime = pts;
-                return true;
+                    currTime = pts;
+
+                    if (drop_frame_counter == 0)
+                        return true;
+
+                    drop_frame_counter--;
+                }
             }
         }
 
@@ -614,7 +633,7 @@ loop_exit:
 }
 
 int
-FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec, const bool decodeTillMinReqTime, const double & minReqTimeMS)
+FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec, const size_t & drop_frame_nb, const bool decodeTillMinReqTime, const double & minReqTimeMS)
 {
     unsigned long       packetPos;
     int                 rezValue    = -1;
@@ -624,10 +643,12 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec, cons
     {
         return -1;
     }
+osg::Timer              loc_timer;
 
     // Assign appropriate parts of buffer to image planes in pFrameRGB
     avpicture_fill ((AVPicture *)pFrameRGB, buffer, m_pixelFormat, m_new_width, m_new_height);
-    if (GetNextFrame(pCodecCtx, m_pSrcFrame, packetPos, timeStampInSec, decodeTillMinReqTime, minReqTimeMS))
+const double            timer_0_ms      = loc_timer.time_m();
+    if (GetNextFrame(pCodecCtx, m_pSrcFrame, packetPos, timeStampInSec, drop_frame_nb, decodeTillMinReqTime, minReqTimeMS))
     {
         // Convert image to necessary format
 #ifdef USE_SWSCALE
@@ -646,6 +667,7 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec, cons
                 return -1;
             }
         }
+const double            timer_1_ms      = loc_timer.time_m();
 
         sws_scale(img_convert_ctx, m_pSrcFrame->data,
                   m_pSrcFrame->linesize, 0,
@@ -655,12 +677,48 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec, cons
         img_convert(pFrameRGB->data, m_pixelFormat, m_pSrcFrame->data,
                     pCodecCtx->pix_fmt, pCodecCtx->width, pCodecCtx->height);
 #endif
-
+const double            timer_2_ms      = loc_timer.time_m();
+static size_t   statistic_counter = 0;
+static size_t   statistic_counter_nb = 100;
+static int      statistic_GetNextFrame_sum = 0;
+static int      statistic_GetNextFrame_max = 0;
+static int      statistic_ImgScale_sum = 0;
+static int      statistic_ImgScale_max = 0;
+if (statistic_counter < statistic_counter_nb)
+{
+    const int GetNextFrame_ms = (int)(timer_1_ms - timer_0_ms);
+    const int ImgScale_ms = (int)(timer_2_ms - timer_1_ms);
+    //
+    statistic_GetNextFrame_sum += GetNextFrame_ms;
+    statistic_GetNextFrame_max = std::max(statistic_GetNextFrame_max, GetNextFrame_ms);
+    //
+    statistic_ImgScale_sum += ImgScale_ms;
+    statistic_ImgScale_max = std::max(statistic_ImgScale_max, ImgScale_ms);
+    //
+    statistic_counter++;
+    //
+    if (statistic_counter == statistic_counter_nb)
+    {
+        fprintf (stdout, "Statistics:\n");
+        fprintf (stdout, " GetNextFrame avg/max [ms]: %d/%d\n", (int)((double)statistic_GetNextFrame_sum / (double)statistic_counter), statistic_GetNextFrame_max);
+        fprintf (stdout, " Frame Scale avg/max [ms]: %d/%d\n", (int)((double)statistic_ImgScale_sum / (double)statistic_counter), statistic_ImgScale_max);
+        statistic_counter = 0;
+        statistic_GetNextFrame_sum = 0;
+        statistic_GetNextFrame_max = 0;
+        statistic_ImgScale_sum = 0;
+        statistic_ImgScale_max = 0;
+        statistic_counter_nb *= 2;
+    }
+}
+/*
+fprintf (stdout, "GetNextFrame + sws_scale spent %3d %3d ms Time: %4d ms DTMRT: %d(%4d)\n", (int)(timer_1_ms - timer_0_ms), (int)(timer_2_ms - timer_1_ms), (int)(timeStampInSec*1000),
+         decodeTillMinReqTime ? 1 : 0,
+         (int)minReqTimeMS);
+*/
         rezValue = 0;
     }
     //
     OSG_FREE_FRAME  (& pFrameRGB);
-
     return rezValue;
 }
 
@@ -704,7 +762,7 @@ FFmpegVideoReader::seek(int64_t timestamp/*milliseconds*/, unsigned char * ptrRG
     //
     if (retValueSeekFrame < 0)
          retValueSeekFrame = av_seek_frame(m_fmt_ctx_ptr, m_videoStreamIndex, seek_target, AVSEEK_FLAG_ANY);
-    
+
     if (retValueSeekFrame >= 0)
     {
         AVCodecContext *    pCodecCtx = m_fmt_ctx_ptr->streams[m_videoStreamIndex]->codec;

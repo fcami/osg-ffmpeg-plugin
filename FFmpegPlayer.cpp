@@ -7,6 +7,8 @@
 
 #include <memory>
 
+size_t getMemorySize();
+
 namespace osgFFmpeg {
 
 FFmpegPlayer::FFmpegPlayer() :
@@ -48,6 +50,8 @@ FFmpegPlayer::~FFmpegPlayer()
 
 bool FFmpegPlayer::open(const std::string & filename, FFmpegParameters* parameters)
 {
+    OSG_NOTICE << "FFmpeg plugin release version: " << OSG_FFMPEG_PLUGIN_RELEASE_VERSION_INT << std::endl;
+    OSG_NOTICE << "OS physical RAM size: " << getMemorySize() / 1000000 << " MB" << std::endl;
     setFileName(filename);
 
     if (m_fileHolder.open(filename, parameters) < 0)

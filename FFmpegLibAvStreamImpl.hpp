@@ -13,13 +13,14 @@
 
 namespace osgFFmpeg {
 
-class FFmpegLibAvStreamImpl : public FFmpegILibAvStreamImpl, public OpenThreads::Thread
+class FFmpegLibAvStreamImpl : public FFmpegILibAvStreamImpl, protected OpenThreads::Thread
 {
 private:
     typedef OpenThreads::Mutex              Mutex;
     typedef OpenThreads::ScopedLock<Mutex>  ScopedLock;
     typedef OpenThreads::Condition          Condition;
     Condition                               m_threadLocker;
+    mutable Mutex                           m_mutex;
 
     bool                            m_loop;
 
@@ -32,6 +33,8 @@ private:
     const unsigned char             m_AudioBufferTimeSec;
     AudioBuffer                     m_audio_buffer;
     unsigned long                   m_ellapsedAudioMicroSec;
+    osg::Timer                      m_ellapsedAudioMicroSecOffsetTimer;
+    unsigned long                   m_ellapsedAudioMicroSecOffsetInitial;
     unsigned long                   m_audioDelayMicroSec;
     volatile bool                   m_audio_buffering_finished;
     //

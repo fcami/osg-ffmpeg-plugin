@@ -6,8 +6,8 @@ namespace osgFFmpeg {
 FFmpegFileHolder::FFmpegFileHolder()
 :m_audioIndex(-1),m_videoIndex(-1),
 m_duration(0),
-m_alpha_channel(false),
-m_pixAspectRatio(1.0f)
+m_pixAspectRatio(1.0f),
+m_alpha_channel(false)
 {
 }
 
@@ -109,12 +109,10 @@ FFmpegFileHolder::open (const std::string & filename, FFmpegParameters* paramete
         m_alpha_channel                     = false;
         //
         const bool useRGB_notBGR            = true; // all Video-data will be represented as RGB24
-        const long scaledWidth              = 0;    // actual video size will produced
 
         m_videoIndex = FFmpegWrapper::openVideo(filename.c_str(),
                                                 parameters,
                                                 useRGB_notBGR,
-                                                scaledWidth,
                                                 m_pixAspectRatio,
                                                 m_frame_rate,
                                                 m_alpha_channel);

@@ -34,7 +34,6 @@ const long
 FFmpegWrapper::openVideo(const char * pFileName,
                          FFmpegParameters * parameters,
                          const bool useRGB_notBGR,
-                         const long scaledWidth,
                          float & aspectRatio,
                          float & frame_rate,
                          bool & alphaChannel)
@@ -43,7 +42,7 @@ FFmpegWrapper::openVideo(const char * pFileName,
     FFmpegVideoReader* media = new FFmpegVideoReader();
     try
     {
-        int ret = media->openFile(pFileName, parameters, useRGB_notBGR, scaledWidth, aspectRatio, frame_rate, alphaChannel);
+        int ret = media->openFile(pFileName, parameters, useRGB_notBGR, aspectRatio, frame_rate, alphaChannel);
         if (ret == 0)
         {
             const long maxIndexVideoFiles = g_maxIndexVideoFiles;
@@ -180,14 +179,14 @@ FFmpegWrapper::getImage(const long indexFile, unsigned long msTime, unsigned cha
 }
 
 const short
-FFmpegWrapper::getNextImage(const long indexFile, unsigned char * bufRGB24, double & timeStampInSec, const bool decodeTillMinReqTime, const double minReqTimeMS)
+FFmpegWrapper::getNextImage(const long indexFile, unsigned char * bufRGB24, double & timeStampInSec, const size_t & drop_frame_nb, const bool decodeTillMinReqTime, const double minReqTimeMS)
 {
     short ret_value = -1;
     try
     {
         if (checkIndexVideoValid(indexFile) == 0 && bufRGB24 != NULL)
         {
-            ret_value = g_openedVideoFiles[indexFile]->grabNextFrame(bufRGB24, timeStampInSec, decodeTillMinReqTime, minReqTimeMS);
+            ret_value = g_openedVideoFiles[indexFile]->grabNextFrame(bufRGB24, timeStampInSec, drop_frame_nb, decodeTillMinReqTime, minReqTimeMS);
         }
     }
     catch (...)

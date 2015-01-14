@@ -19,6 +19,7 @@ extern "C"
 #endif
 
 #include <libavutil/mathematics.h>
+#include <libavutil/parseutils.h>
 
 #ifdef USE_SWSCALE    
     #include <libswscale/swscale.h>

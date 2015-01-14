@@ -76,7 +76,7 @@ class VideoVectorBuffer
     typedef OpenThreads::ScopedLock<Mutex>  ScopedLock;
 
 private:
-    Mutex                           m_mutex;
+    mutable Mutex                   m_mutex;
     long                            m_fileIndex;
     unsigned long                   m_videoLength;
     unsigned int                    m_frameSize;
@@ -97,9 +97,11 @@ public:
     const int               alloc(const FFmpegFileHolder * pHolder);
     void                    flush();
     void                    release();
-    void                    writeFrame(const unsigned int & flag);
+    void                    writeFrame(const unsigned int & flag, const size_t & drop_frame_nb);
 
 
+    const unsigned int      freeSpaceSize() const;
+    const unsigned int      size() const;
 
     const bool              isBufferFull();
     const bool              isStreamFinished();

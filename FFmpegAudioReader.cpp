@@ -43,7 +43,7 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
         if (parameters)
         {
             av_dict_set(parameters->getOptions(), "video_size", "640x480", 0);
-            av_dict_set(parameters->getOptions(), "framerate", "1:30", 0);
+            av_dict_set(parameters->getOptions(), "framerate", "30:1", 0);
         }
 
         std::string format = "video4linux2";
@@ -152,7 +152,7 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
     pCodecCtx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
     pCodecCtx->thread_count = 1;
 #ifdef USE_AV_LOCK_MANAGER
-    pCodecCtx->thread_count = 2;
+    pCodecCtx->thread_count = 0; // automatically search necessary value
 #endif // USE_AV_LOCK_MANAGER
 // see: https://gitorious.org/libav/libav/commit/0b950fe240936fa48fd41204bcfd04f35bbf39c3
 // "introduce avcodec_open2() as a replacement for avcodec_open()."

@@ -40,9 +40,7 @@ public:
     // - No one exception throws from function;
     // - If [useRGB_notBGR] == true, all Video-data will be represented as RGB24, otherwise as BGR24
     // - If opened media-file has not video-stream, return error;
-    // - If [scaledWidth] == 0, actual video size will produced. In another case, video-size may be scaled to
-    //   width == [scaledWidth] with actual Video Aspect Ratio when new width is less then actual width.
-    static const long  openVideo(const char * pFileName, FFmpegParameters * parameters, const bool useRGB_notBGR, const long scaledWidth, float & aspectRatio, float & frame_rate, bool & alphaChannel);
+    static const long  openVideo(const char * pFileName, FFmpegParameters * parameters, const bool useRGB_notBGR, float & aspectRatio, float & frame_rate, bool & alphaChannel);
 
     // Close Video-file(opened by [openVideo])
     //
@@ -126,7 +124,7 @@ public:
     // - [decodeTillMinReqTime] - if false, then during searching to [minReqTimeMS], packets will not be decoded.
     //  It is fast but frame will be with artifacts. If true - then no artifacts, but slowly.
     //  Has not depending, if [minReqTimeMS] < 0.
-    static const short getNextImage(const long indexFile, unsigned char * bufRGB24, double & timeStampInSec, const bool decodeTillMinReqTime = true, const double minReqTimeMS = -1.0);
+    static const short getNextImage(const long indexFile, unsigned char * bufRGB24, double & timeStampInSec, const size_t & drop_frame_nb, const bool decodeTillMinReqTime = true, const double minReqTimeMS = -1.0);
 
     /// =======================================================================================================================================
     /// Access to read audio

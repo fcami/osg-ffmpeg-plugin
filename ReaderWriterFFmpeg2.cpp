@@ -97,8 +97,9 @@ public:
 
         supportsOption("format",            "Force setting input format (e.g. vfwcap for Windows webcam)");
         supportsOption("pixel_format",      "Set pixel format");
-        supportsOption("frame_size",              "Set frame size (e.g. 320x240)");
-        supportsOption("frame_rate",        "Set frame rate (e.g. 25)");
+//        supportsOption("frame_size",              "Set frame size (e.g. 320x240)"); // no such parameter
+        supportsOption("video_size",        "Set frame size (e.g. 320x240)");
+        supportsOption("frame_rate",        "Set frame rate (e.g. 25:1)");
         supportsOption("audio_sample_rate", "Set audio sampling rate (e.g. 44100)");
         supportsOption("context",            "AVIOContext* for custom IO");
 
