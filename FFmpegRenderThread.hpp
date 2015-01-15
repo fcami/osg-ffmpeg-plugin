@@ -17,7 +17,6 @@ class FFmpegRenderThread : protected OpenThreads::Thread
     volatile bool               m_renderingThreadStop;
 
     virtual void                run();
-    virtual void                quit(bool waitForThreadToExit = true);
 public:
 
     virtual                     ~FFmpegRenderThread();
@@ -26,6 +25,7 @@ public:
 
     void                        Start();
     void                        Stop();
+    virtual void                quit(bool waitForThreadToExit = true);
 };
 
 } // namespace osgFFmpeg
