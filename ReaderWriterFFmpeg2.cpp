@@ -81,6 +81,7 @@ public:
         supportsExtension("mov",    "Quicktime");
         supportsExtension("ogg",    "Theora movie format");
         supportsExtension("mpg",    "Mpeg movie format");
+        supportsExtension("mpeg",   "Mpeg movie format");
         supportsExtension("mpv",    "Mpeg movie format");
         supportsExtension("wmv",    "Windows Media Video format");
         supportsExtension("mkv",    "Matroska");
@@ -93,12 +94,11 @@ public:
         supportsExtension("m2ts",   "MPEG-2 Transport Stream");
 
         supportsExtension("ogv",   "");
-        supportsExtension("wav",    "");
+        supportsExtension("wav",   "");
 
         supportsOption("format",            "Force setting input format (e.g. vfwcap for Windows webcam)");
         supportsOption("pixel_format",      "Set pixel format");
-//        supportsOption("frame_size",              "Set frame size (e.g. 320x240)"); // no such parameter
-        supportsOption("video_size",        "Set frame size (e.g. 320x240)");
+        supportsOption("video_size",        "Set frame size (e.g. 320x240)"); // no such parameter as "frame_size"
         supportsOption("frame_rate",        "Set frame rate (e.g. 25:1)");
         supportsOption("audio_sample_rate", "Set audio sampling rate (e.g. 44100)");
         supportsOption("context",            "AVIOContext* for custom IO");
