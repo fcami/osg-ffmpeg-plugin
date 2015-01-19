@@ -120,14 +120,19 @@ FFmpegLibAvStreamImpl::loop() const
 }
 
 const unsigned long
-FFmpegLibAvStreamImpl::GetAudioPlaybackTime() const
+FFmpegLibAvStreamImpl::GetPlaybackTime() const
 {
-    ScopedLock  lock (m_mutex);
+    if (isHasAudio())
+    {
+        ScopedLock  lock (m_mutex);
 
-    const unsigned long actual_offset_micros = (m_ellapsedAudioMicroSecOffsetInitial > 0) ? (m_ellapsedAudioMicroSecOffsetTimer.time_u() - m_ellapsedAudioMicroSecOffsetInitial) : 0;
-    const unsigned long actual_value_ms = ((m_ellapsedAudioMicroSec - m_audioDelayMicroSec + actual_offset_micros)/1000);
+        const unsigned long actual_offset_micros = (m_ellapsedAudioMicroSecOffsetInitial > 0) ? (m_ellapsedAudioMicroSecOffsetTimer.time_u() - m_ellapsedAudioMicroSecOffsetInitial) : 0;
+        const unsigned long actual_value_ms = (m_ellapsedAudioMicroSec + actual_offset_micros - m_audioDelayMicroSec) / 1000;
 
-    return (m_ellapsedAudioMicroSec < m_audioDelayMicroSec) ? 0 : actual_value_ms;
+        return (m_ellapsedAudioMicroSec < m_audioDelayMicroSec) ? 0 : actual_value_ms;
+    }
+
+    return m_playerTimer.ElapsedMilliseconds ();
 }
 
 void
@@ -176,12 +181,6 @@ FFmpegLibAvStreamImpl::Seek(const unsigned long & newTimeMS)
     m_playerTimer.ElapsedMilliseconds (newTimeMS);
     m_ellapsedAudioMicroSec = newTimeMS * 1000;
     m_ellapsedAudioMicroSecOffsetInitial = 0;
-}
-
-const unsigned long
-FFmpegLibAvStreamImpl::ElapsedMilliseconds() const
-{
-    return m_playerTimer.ElapsedMilliseconds();
 }
 
 const bool
@@ -327,8 +326,14 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
     {
         ScopedLock  lock (m_mutex);
 
-        m_ellapsedAudioMicroSec += playbackSec * 1000000.0;
-        m_ellapsedAudioMicroSecOffsetInitial = m_ellapsedAudioMicroSecOffsetTimer.time_u();
+        const double    curr_micros         = m_ellapsedAudioMicroSecOffsetTimer.time_u();
+        double          compensate_micros   = 0.0;
+
+        if (m_ellapsedAudioMicroSecOffsetInitial > 0)
+            compensate_micros  = (curr_micros - m_ellapsedAudioMicroSecOffsetInitial) - playbackSec * 1000000.0;
+
+        m_ellapsedAudioMicroSecOffsetInitial = curr_micros;
+        m_ellapsedAudioMicroSec += playbackSec * 1000000.0 + compensate_micros;
     }
     //
     // Important:
@@ -536,8 +541,9 @@ FFmpegLibAvStreamImpl::isPlaybackFinished()
     }
     else
     {
-        const unsigned long elapsedTimeMS = ElapsedMilliseconds();
-        const double duration_ms = m_pPlayer->getLength();
+        const unsigned long elapsedTimeMS   = m_playerTimer.ElapsedMilliseconds();
+        const double        duration_ms     = m_pPlayer->getLength();
+
         if (elapsedTimeMS >= duration_ms)
             return true;
     }

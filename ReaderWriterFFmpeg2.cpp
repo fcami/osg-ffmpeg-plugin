@@ -153,7 +153,14 @@ public:
         }
 
         if (! acceptsExtension(ext))
-            return ReadResult::FILE_NOT_HANDLED;
+        {
+            //
+            // Notice about potential trouble.
+            // But it is not critical error because even file-extension does not exist in acceptable-list,
+            // file could be opened by ffmpeg.
+            //
+            OSG_WARN << "Plugin " << className() << " does not prepared for reading the file with extension \'" << osgDB::getLowerCaseFileExtension(filename) << "\' but will try to open it" << std::endl;
+        }
 
         const std::string path = osgDB::containsServerAddress(filename) ?
             filename :
@@ -167,7 +174,7 @@ public:
 
     ReadResult readImageStream(const std::string& filename, osgFFmpeg::FFmpegParameters* parameters) const
     {
-        OSG_INFO << "ReaderWriterFFmpeg::readImage " << filename << std::endl;
+        OSG_INFO << "ReaderWriterFFmpeg2::readImage " << filename << std::endl;
 
         osg::ref_ptr<osgFFmpeg::FFmpegPlayer> image_stream(new osgFFmpeg::FFmpegPlayer);
 
