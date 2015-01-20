@@ -81,6 +81,7 @@ public:
         supportsExtension("mov",    "Quicktime");
         supportsExtension("ogg",    "Theora movie format");
         supportsExtension("mpg",    "Mpeg movie format");
+        supportsExtension("mpeg",   "Mpeg movie format");
         supportsExtension("mpv",    "Mpeg movie format");
         supportsExtension("wmv",    "Windows Media Video format");
         supportsExtension("mkv",    "Matroska");
@@ -93,12 +94,11 @@ public:
         supportsExtension("m2ts",   "MPEG-2 Transport Stream");
 
         supportsExtension("ogv",   "");
-        supportsExtension("wav",    "");
+        supportsExtension("wav",   "");
 
         supportsOption("format",            "Force setting input format (e.g. vfwcap for Windows webcam)");
         supportsOption("pixel_format",      "Set pixel format");
-//        supportsOption("frame_size",              "Set frame size (e.g. 320x240)"); // no such parameter
-        supportsOption("video_size",        "Set frame size (e.g. 320x240)");
+        supportsOption("video_size",        "Set frame size (e.g. 320x240)"); // no such parameter as "frame_size"
         supportsOption("frame_rate",        "Set frame rate (e.g. 25:1)");
         supportsOption("audio_sample_rate", "Set audio sampling rate (e.g. 44100)");
         supportsOption("context",            "AVIOContext* for custom IO");
@@ -153,7 +153,14 @@ public:
         }
 
         if (! acceptsExtension(ext))
-            return ReadResult::FILE_NOT_HANDLED;
+        {
+            //
+            // Notice about potential trouble.
+            // But it is not critical error because even file-extension does not exist in acceptable-list,
+            // file could be opened by ffmpeg.
+            //
+            OSG_WARN << "Plugin " << className() << " does not prepared for reading the file with extension \'" << osgDB::getLowerCaseFileExtension(filename) << "\' but will try to open it" << std::endl;
+        }
 
         const std::string path = osgDB::containsServerAddress(filename) ?
             filename :
@@ -167,7 +174,7 @@ public:
 
     ReadResult readImageStream(const std::string& filename, osgFFmpeg::FFmpegParameters* parameters) const
     {
-        OSG_INFO << "ReaderWriterFFmpeg::readImage " << filename << std::endl;
+        OSG_INFO << "ReaderWriterFFmpeg2::readImage " << filename << std::endl;
 
         osg::ref_ptr<osgFFmpeg::FFmpegPlayer> image_stream(new osgFFmpeg::FFmpegPlayer);
 

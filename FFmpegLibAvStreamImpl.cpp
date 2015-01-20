@@ -120,14 +120,19 @@ FFmpegLibAvStreamImpl::loop() const
 }
 
 const unsigned long
-FFmpegLibAvStreamImpl::GetAudioPlaybackTime() const
+FFmpegLibAvStreamImpl::GetPlaybackTime() const
 {
-    ScopedLock  lock (m_mutex);
+    if (isHasAudio())
+    {
+        ScopedLock  lock (m_mutex);
 
-    const unsigned long actual_offset_micros = (m_ellapsedAudioMicroSecOffsetInitial > 0) ? (m_ellapsedAudioMicroSecOffsetTimer.time_u() - m_ellapsedAudioMicroSecOffsetInitial) : 0;
-    const unsigned long actual_value_ms = ((m_ellapsedAudioMicroSec - m_audioDelayMicroSec + actual_offset_micros)/1000);
+        const unsigned long actual_offset_micros = (m_ellapsedAudioMicroSecOffsetInitial > 0) ? (m_ellapsedAudioMicroSecOffsetTimer.time_u() - m_ellapsedAudioMicroSecOffsetInitial) : 0;
+        const unsigned long actual_value_ms = (m_ellapsedAudioMicroSec + actual_offset_micros - m_audioDelayMicroSec) / 1000;
 
-    return (m_ellapsedAudioMicroSec < m_audioDelayMicroSec) ? 0 : actual_value_ms;
+        return (m_ellapsedAudioMicroSec < m_audioDelayMicroSec) ? 0 : actual_value_ms;
+    }
+
+    return m_playerTimer.ElapsedMilliseconds ();
 }
 
 void
@@ -176,12 +181,6 @@ FFmpegLibAvStreamImpl::Seek(const unsigned long & newTimeMS)
     m_playerTimer.ElapsedMilliseconds (newTimeMS);
     m_ellapsedAudioMicroSec = newTimeMS * 1000;
     m_ellapsedAudioMicroSecOffsetInitial = 0;
-}
-
-const unsigned long
-FFmpegLibAvStreamImpl::ElapsedMilliseconds() const
-{
-    return m_playerTimer.ElapsedMilliseconds();
 }
 
 const bool
@@ -327,8 +326,14 @@ FFmpegLibAvStreamImpl::GetAudio(void * buffer, int bytesLength)
     {
         ScopedLock  lock (m_mutex);
 
-        m_ellapsedAudioMicroSec += playbackSec * 1000000.0;
-        m_ellapsedAudioMicroSecOffsetInitial = m_ellapsedAudioMicroSecOffsetTimer.time_u();
+        const double    curr_micros         = m_ellapsedAudioMicroSecOffsetTimer.time_u();
+        double          compensate_micros   = 0.0;
+
+        if (m_ellapsedAudioMicroSecOffsetInitial > 0)
+            compensate_micros  = (curr_micros - m_ellapsedAudioMicroSecOffsetInitial) - playbackSec * 1000000.0;
+
+        m_ellapsedAudioMicroSecOffsetInitial = curr_micros;
+        m_ellapsedAudioMicroSec += playbackSec * 1000000.0 + compensate_micros;
     }
     //
     // Important:
@@ -454,9 +459,13 @@ FFmpegLibAvStreamImpl::preRun()
             // todo: should be processed to error
             const int biErr = m_video_buffer.GetFramePtr(0, pFrame);
 
-            // todo: should be processed to error
             const short sErr = FFmpegWrapper::getImage(m_videoIndex, elapsedTimeMS, pFrame);
             m_video_buffer.ReleaseFoundFrame();
+
+            if (sErr < 0)
+            {
+                m_video_buffer.setStreamFinished (true);
+            }
         }
     }
 }
@@ -464,8 +473,7 @@ FFmpegLibAvStreamImpl::preRun()
 void
 FFmpegLibAvStreamImpl::postRun()
 {
-    if (isHasVideo())
-        m_renderer.Stop();
+    m_renderer.Stop();
 
     if (m_audio_sink.valid())
         m_audio_sink->pause();
@@ -519,7 +527,7 @@ FFmpegLibAvStreamImpl::startPlayback()
         //
         m_audio_sink->play();
     }
-    if (isHasVideo())
+    if (isHasVideo() && m_video_buffer.isStreamFinished() == false)
         m_renderer.Start();
 }
 
@@ -535,8 +543,9 @@ FFmpegLibAvStreamImpl::isPlaybackFinished()
     }
     else
     {
-        const unsigned long elapsedTimeMS = ElapsedMilliseconds();
-        const double duration_ms = m_pPlayer->getLength();
+        const unsigned long elapsedTimeMS   = m_playerTimer.ElapsedMilliseconds();
+        const double        duration_ms     = m_pPlayer->getLength();
+
         if (elapsedTimeMS >= duration_ms)
             return true;
     }
@@ -559,16 +568,17 @@ FFmpegLibAvStreamImpl::run()
     try
     {
         //
-        bool                videoBufferFull;
-        bool                audioBufferFull;
+        bool                videoGrabbingInProcess;
+        bool                audioGrabbingInProcess;
         //
         bool                isPlaybackStarted   = false;
-        size_t              drop_frame_nb = 0;
+        size_t              drop_frame_nb       = 0;
+        //
         while (m_shadowThreadStop == false)
         {
             unsigned int    videoWriteFlag = 0;
-            audioBufferFull = true;
-            videoBufferFull = true;
+            audioGrabbingInProcess = false;
+            videoGrabbingInProcess = false;
             //
             // Grab Audio Buffer
             //
@@ -599,9 +609,9 @@ FFmpegLibAvStreamImpl::run()
                         {
                             const double video_frameTimeSec = 1.0 / m_frame_rate;
 
-                                                                          // audio_bufferedRatio:      0.25 ... 0.5       ... 1.0
-                            double coeff = 0.25 / (audio_bufferedRatio - 0.25 + DBL_MIN) - 0.333;   // +INF ... 0.7       ... 0.0
-                            max_avail_time_micros = video_frameTimeSec * coeff * 1000000.0;         // +INF ... frame*0.7 ... 0
+                                                                                                    // audio_bufferedRatio:       0.25 ... 0.5       ... 1.0
+                            double coeff = 0.25 / (audio_bufferedRatio - 0.25 + std::numeric_limits<double>::min()) - 0.333;   // +INF ... 0.7       ... 0.0
+                            max_avail_time_micros = video_frameTimeSec * coeff * 1000000.0;         //                            +INF ... frame*0.7 ... 0.0
                         }
                         else
                         {
@@ -619,7 +629,7 @@ FFmpegLibAvStreamImpl::run()
                     if (bytesread > 0)
                     {
                         m_audio_buffer.write (pAudioData, bytesread);
-                        audioBufferFull = false;
+                        audioGrabbingInProcess = true;
                     }
                     else
                     {
@@ -634,21 +644,27 @@ FFmpegLibAvStreamImpl::run()
             //
             if (isHasVideo())
             {
-                if (m_video_buffer.isBufferFull() == false &&
-                    m_video_buffer.isStreamFinished() == false)
+                if (m_video_buffer.isStreamFinished() == false)
                 {
-                    //
-                    // Provide little acceleration for video grabbing
-                    // Test shows, that 20-frame buffer accelerated enough by 1-frame dropping in half of the buffer-size.
-                    //
-                    if (isPlaybackStarted && m_video_buffer.isStreamFinished() == false)
+                    if (m_video_buffer.isBufferFull() == false)
                     {
-                        double aspect = (double)m_video_buffer.freeSpaceSize() / (double)m_video_buffer.size();
-                        drop_frame_nb = aspect * 2;
-                    }
-                    m_video_buffer.writeFrame (videoWriteFlag, drop_frame_nb);
+                        //
+                        // Provide little acceleration for video grabbing
+                        // Test shows, that 20-frame buffer accelerated enough by 1-frame dropping in half of the buffer-size.
+                        //
+                        if (isPlaybackStarted && m_video_buffer.isStreamFinished() == false)
+                        {
+                            double aspect = (double)m_video_buffer.freeSpaceSize() / (double)m_video_buffer.size();
+                            drop_frame_nb = aspect * 2;
+                        }
+                        m_video_buffer.writeFrame (videoWriteFlag, drop_frame_nb);
 
-                    videoBufferFull = false;
+                        videoGrabbingInProcess = true;
+                    }
+                }
+                else
+                {
+                    m_renderer.quit(false);
                 }
             }
             if (isPlaybackStarted && isPlaybackFinished())
@@ -656,12 +672,13 @@ FFmpegLibAvStreamImpl::run()
                 break;
             }
             //
-            // If buffers are full:
+            // If grabbings do not work(waste a time):
             //
-            // 1. If it is first buffer's full state, we may start playback.
-            // 2. it may couse to get too many empty loops, so locks this thread till some buffer opens for writing
+            // 1. If it is first wasting of the time and playback did not started before, we may start playback.
+            // 2. It may couse to get too many empty loops, so locks this thread till some buffer opens for writing, or interrupt for exit
             //
-            if (audioBufferFull && videoBufferFull)
+            if (audioGrabbingInProcess == false &&
+                videoGrabbingInProcess == false)
             {
                 if (isPlaybackStarted == false)
                 {

@@ -64,10 +64,7 @@ FFmpegRenderThread::run()
         {
             //
             //
-            if (m_pLibAvStream->isHasAudio())
-                timePosMS = m_pLibAvStream->GetAudioPlaybackTime();
-            else
-                timePosMS = m_pLibAvStream->ElapsedMilliseconds();
+            timePosMS = m_pLibAvStream->GetPlaybackTime();
 
             iErr = m_pLibAvStream->GetFramePtr (timePosMS, pFramePtr);
             //
