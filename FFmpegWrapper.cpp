@@ -166,7 +166,7 @@ FFmpegWrapper::getImage(const long indexFile, unsigned long msTime, unsigned cha
                 }
                 else
                 {
-                    OSG_NOTICE << "Asked time is out of range" << std::endl;
+                    OSG_NOTICE << "Video seeking: asked time is out of range" << std::endl;
                 }
             }
         }

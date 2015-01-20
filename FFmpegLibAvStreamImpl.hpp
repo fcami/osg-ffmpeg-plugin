@@ -69,7 +69,6 @@ public:
     virtual void                    Pause();
     virtual void                    Stop();
     virtual void                    Seek(const unsigned long & newTimeMS);
-    virtual const unsigned long     ElapsedMilliseconds() const;
 
     virtual const bool              isHasAudio() const;
     virtual void                    setAudioVolume(const float &);
@@ -78,7 +77,7 @@ public:
     virtual const float             getAudioBalance() const;
     virtual void                    setAudioBalance(const float & balance);
     virtual void                    GetAudio(void * buffer, int bytesLength);
-    virtual const unsigned long     GetAudioPlaybackTime() const;
+    virtual const unsigned long     GetPlaybackTime() const;
     //
     /*
      * DO NOT FORGET CALL ReleaseFoundFrame() AFTER GetFramePtr() CALLED AND PTR HAS BEEN USED.

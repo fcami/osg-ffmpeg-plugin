@@ -135,14 +135,9 @@ FFmpegStreamer::seek(const unsigned long & timeMS)
 const double
 FFmpegStreamer::getCurrentTimeSec() const
 {
-    unsigned long   ulCurrTimeMS;
+    unsigned long   ulCurrTimeMS = m_pLibAvStreamImpl->GetPlaybackTime();
 
-    if (m_pLibAvStreamImpl->isHasAudio())
-        ulCurrTimeMS = m_pLibAvStreamImpl->GetAudioPlaybackTime();
-    else
-        ulCurrTimeMS = m_pLibAvStreamImpl->ElapsedMilliseconds();
-
-    const double  dCurrTimeSec = (double)ulCurrTimeMS/1000.0;
+    const double    dCurrTimeSec = (double)ulCurrTimeMS/1000.0;
 
     return dCurrTimeSec;
 }
