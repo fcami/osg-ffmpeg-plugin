@@ -57,7 +57,8 @@ static void log_to_osg(void *ptr, int level, const char *fmt, va_list vl)
     }
 
     // Most av_logs have a trailing newline already
-    osg::notify(severity) << logbuf;
+//    osg::notify(severity) << logbuf;
+    fprintf (stdout, "ffmpeg: %s\n", logbuf);
 }
 
 } // extern "C"
@@ -70,6 +71,8 @@ public:
 
     ReaderWriterFFmpeg2()
     {
+fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2()\n");
+
         supportsProtocol("http","Read video/audio from http using ffmpeg.");
         supportsProtocol("rtsp","Read video/audio from rtsp using ffmpeg.");
         supportsProtocol("rtp","Read video/audio from rtp using ffmpeg.");
@@ -98,6 +101,7 @@ public:
 
         supportsOption("format",            "Force setting input format (e.g. vfwcap for Windows webcam)");
         supportsOption("pixel_format",      "Set pixel format");
+        supportsOption("threads",           "Force to use threads number");
         supportsOption("video_size",        "Set frame size (e.g. 320x240)"); // no such parameter as "frame_size"
         supportsOption("frame_rate",        "Set frame rate (e.g. 25:1)");
         supportsOption("audio_sample_rate", "Set audio sampling rate (e.g. 44100)");
@@ -108,12 +112,15 @@ public:
 #ifdef USE_AV_LOCK_MANAGER
         // enable thread locking
         av_lockmgr_register(&lockMgr);
+fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() av_lockmgr_register()\n");
 #endif
         // Register all FFmpeg formats/codecs
         av_register_all();
+fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() av_register_all()\n");
 
 #if LIBAVFORMAT_VERSION_MAJOR >= 54
         avformat_network_init();
+fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() avformat_network_init()\n");
 #else
         OSG_NOTICE << "This ver of libavformat does not support avformat_network_init()" << std::endl;
 #endif

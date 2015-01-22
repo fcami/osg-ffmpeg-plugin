@@ -4,9 +4,34 @@
 #include <osg/Timer>
 
 #include <stdexcept>
+#include <fstream>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 namespace osgFFmpeg {
+/*
+int64_t bigFileSize(const char *path)
+{
+#ifdef WIN32
+    struct __stat64 S;
+    if(-1 == _stat64(path, &S))
+    {
+        printf("Error!\r\n");
+        return -1;
+    }
+#else
+    struct stat64 S;
+    if(-1 == stat64(path, &S))
+    {
+        printf("Error!\r\n");
+        return -1;
+    }
+#endif
 
+
+    return S.st_size;
+}
+*/
 const int
 FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
 {
@@ -22,6 +47,7 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
     m_reader_buffer_shift               = 0;
     m_output_buffer_length_prev         = 0;
     m_FirstFrame                        = true;
+    m_input_currTime                    = 0.0;
 #ifdef USE_SWRESAMPLE
     m_audio_swr_cntx                    = NULL;
 #else
@@ -70,6 +96,17 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
             fmt_ctx = avformat_alloc_context();
             fmt_ctx->pb = context;
         }
+    }
+    //
+    // Parse options
+    //
+    size_t                  threadNb = 0; // By default - autodetect thread number
+    AVDictionaryEntry *     dictEntry;
+    AVDictionary *          dict = *parameters->getOptions();
+    dictEntry = NULL;
+    while (dictEntry = av_dict_get(dict, "threads", dictEntry, 0))
+    {
+        threadNb = atoi(dictEntry->value);
     }
 
     if ((err = avformat_open_input(&fmt_ctx, filename, iformat, &format_opts)) < 0)
@@ -152,7 +189,8 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
     pCodecCtx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
     pCodecCtx->thread_count = 1;
 #ifdef USE_AV_LOCK_MANAGER
-    pCodecCtx->thread_count = 0; // automatically search necessary value
+    pCodecCtx->thread_type = FF_THREAD_FRAME;
+    pCodecCtx->thread_count = threadNb;
 #endif // USE_AV_LOCK_MANAGER
 // see: https://gitorious.org/libav/libav/commit/0b950fe240936fa48fd41204bcfd04f35bbf39c3
 // "introduce avcodec_open2() as a replacement for avcodec_open()."
@@ -229,6 +267,16 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
 #endif // OSG_ABLE_PLANAR_AUDIO
     }
 
+    // Get file size
+/*
+    {
+        //std::ifstream::pos_type filesize(const char* filename)
+        {
+            int64_t size = bigFileSize(filename);
+            int a = 0;
+        }
+    }
+*/
     //
     return 0;
 }
@@ -540,10 +588,13 @@ FFmpegAudioReader::GetNextFrame(double & currTime, int16_t * output_buffer, unsi
 }
 
 int
-FFmpegAudioReader::seek(int64_t timestamp /*milliseconds*/)
+FFmpegAudioReader::seek(int64_t timestamp )
 {
     AVCodecContext *pCodecCtx = m_fmt_ctx_ptr->streams[m_audioStreamIndex]->codec;
     avcodec_flush_buffers(pCodecCtx);
+    const int seek_flags = (timestamp >= (int64_t)(m_input_currTime * 1000)) ? (AVSEEK_FLAG_ANY) : (AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
+    //
+    m_input_currTime = (double)timestamp / 1000.0;
     //
     // convert to AV_TIME_BASE
     //
@@ -567,7 +618,7 @@ FFmpegAudioReader::seek(int64_t timestamp /*milliseconds*/)
 
     //
     // For some AC3-audio seek by AVSEEK_FLAG_BACKWARD returns WRONG values.
-    const int seekVal = av_seek_frame(m_fmt_ctx_ptr, m_audioStreamIndex, seek_target, AVSEEK_FLAG_ANY);
+    const int seekVal = av_seek_frame(m_fmt_ctx_ptr, m_audioStreamIndex, seek_target, seek_flags);
     if (seekVal < 0)
     {
         fprintf (stderr, "Cannot seek audio frame\n");
@@ -716,7 +767,6 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
     const int               input_Channels          = input_audio->getChannels();
     //
     unsigned int            output_buffer_size;
-    double                  input_currTime;
 #ifdef USE_SWRESAMPLE
     AVCodecContext *        pCodecCtx               = input_audio->m_fmt_ctx_ptr->streams[input_audio->m_audioStreamIndex]->codec;
 #endif
@@ -769,7 +819,7 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
         //
         // Read [output_buffer_size] bytes from the INPUT buffer to [m_output_buffer]
         //
-        if (input_audio->GetNextFrame(input_currTime,
+        if (input_audio->GetNextFrame(input_audio->m_input_currTime,
                                         (int16_t*)(((unsigned char *)input_audio->m_output_buffer) + input_audio->m_reader_buffer_shift),
                                         output_buffer_size) == false)
         {

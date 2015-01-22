@@ -14,7 +14,8 @@ m_audioVolumeAlternative(1.0f),
 m_audioBalance(0.0f),
 m_AudioBufferTimeSec(6),
 m_ellapsedAudioMicroSec(0),
-m_pPlayer(NULL)
+m_pPlayer(NULL),
+m_useRibbonTimeStrategy(true)
 {
 }
 
@@ -50,12 +51,14 @@ FFmpegLibAvStreamImpl::setAudioSink(osg::AudioSink * audio_sink)
 void
 FFmpegLibAvStreamImpl::setAudioDelayMicroSec (const double & audioDelayMicroSec)
 {
+fprintf (stdout, "setAudioDelayMicroSec() %f\n", audioDelayMicroSec);
     m_audioDelayMicroSec = audioDelayMicroSec;
 }
 
 const int
 FFmpegLibAvStreamImpl::initialize(const FFmpegFileHolder * pHolder, FFmpegPlayer * pPlayer)
 {
+fprintf (stdout, "FFmpegLibAvStreamImpl::initialize()\n");
     m_frame_rate = 1;
     m_audioFormat.clear();
     m_audioIndex = pHolder->audioIndex();
@@ -103,6 +106,7 @@ FFmpegLibAvStreamImpl::initialize(const FFmpegFileHolder * pHolder, FFmpegPlayer
             }
         }
     }
+fprintf (stdout, "FFmpegLibAvStreamImpl::initialize() finished\n");
 
     return (isHasAudio() || isHasVideo()) ? 0 : -1;
 }
@@ -138,6 +142,8 @@ FFmpegLibAvStreamImpl::GetPlaybackTime() const
 void
 FFmpegLibAvStreamImpl::Start()
 {
+fprintf (stdout, "FFmpegLibAvStreamImpl::Start()\n");
+
     //
     // Guaranty that thread will starts even if it was run before
     //
@@ -186,6 +192,7 @@ FFmpegLibAvStreamImpl::Seek(const unsigned long & newTimeMS)
 const bool
 FFmpegLibAvStreamImpl::detectIsItImplementedAudioVolume()
 {
+fprintf (stdout, "FFmpegLibAvStreamImpl::detectIsItImplementedAudioVolume()\n");
     bool    result = false;
     if (m_audio_sink.valid())
     {
@@ -350,18 +357,21 @@ FFmpegLibAvStreamImpl::GetFramePtr(const unsigned long & timePosMS, unsigned cha
     int err = 0;
     try
     {
-        err = m_video_buffer.GetFramePtr (timePosMS, pArray);
+        err = m_video_buffer.GetFramePtr (timePosMS, pArray, m_useRibbonTimeStrategy);
         if (err != 0)
         {
-            // To unlock grabbing stream(and avoid deadlock)
-            // here we have to flush buffer
-            if (m_video_buffer.isBufferFull() &&
-                m_video_buffer.isStreamFinished() == false)
+            if (m_useRibbonTimeStrategy == false)
             {
-                //
-                // Clear buffer to load next block
-                //
-                m_video_buffer.flush();
+                // To unlock grabbing stream(and avoid deadlock)
+                // here we have to flush buffer
+                if (m_video_buffer.isBufferFull() &&
+                    m_video_buffer.isStreamFinished() == false)
+                {
+                    //
+                    // Clear buffer to load next block
+                    //
+                    m_video_buffer.flush();
+                }
             }
         }
     }
@@ -457,7 +467,7 @@ FFmpegLibAvStreamImpl::preRun()
 
             unsigned char * pFrame;
             // todo: should be processed to error
-            const int biErr = m_video_buffer.GetFramePtr(0, pFrame);
+            const int biErr = m_video_buffer.GetFramePtr(0, pFrame, true);
 
             const short sErr = FFmpegWrapper::getImage(m_videoIndex, elapsedTimeMS, pFrame);
             m_video_buffer.ReleaseFoundFrame();
@@ -615,7 +625,8 @@ FFmpegLibAvStreamImpl::run()
                         }
                         else
                         {
-                            videoWriteFlag |= 1; // disable decoding during searching
+                            if (m_useRibbonTimeStrategy == false)
+                                videoWriteFlag |= 1; // disable decoding during searching
                         }
                     }
                     const int bytesread = FFmpegWrapper::getAudioSamples(m_audioIndex,
@@ -648,14 +659,21 @@ FFmpegLibAvStreamImpl::run()
                 {
                     if (m_video_buffer.isBufferFull() == false)
                     {
-                        //
-                        // Provide little acceleration for video grabbing
-                        // Test shows, that 20-frame buffer accelerated enough by 1-frame dropping in half of the buffer-size.
-                        //
-                        if (isPlaybackStarted && m_video_buffer.isStreamFinished() == false)
+                        if (m_useRibbonTimeStrategy == true)
                         {
-                            double aspect = (double)m_video_buffer.freeSpaceSize() / (double)m_video_buffer.size();
-                            drop_frame_nb = aspect * 2;
+                            drop_frame_nb = 0;
+                        }
+                        else
+                        {
+                            //
+                            // Provide little acceleration for video grabbing
+                            // Test shows, that 20-frame buffer accelerated enough by 1-frame dropping in half of the buffer-size.
+                            //
+                            if (isPlaybackStarted && m_video_buffer.isStreamFinished() == false)
+                            {
+                                double aspect = (double)m_video_buffer.freeSpaceSize() / (double)m_video_buffer.size();
+                                drop_frame_nb = aspect * 2;
+                            }
                         }
                         m_video_buffer.writeFrame (videoWriteFlag, drop_frame_nb);
 

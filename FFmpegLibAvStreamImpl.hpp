@@ -42,6 +42,7 @@ private:
     VideoVectorBuffer               m_video_buffer;
     FFmpegRenderThread              m_renderer;
     float                           m_frame_rate;
+    bool                            m_useRibbonTimeStrategy;
     //
     FFmpegTimer                     m_playerTimer;
     bool                            m_isNeedFlushBuffers;
