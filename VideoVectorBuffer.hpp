@@ -117,7 +117,7 @@ public:
     * DO NOT CALL GetFramePtr() TWICE. ALWAYS CALL ReleaseFoundFrame() AFTER EACH CALLING GetFramePtr().
     * 
     */
-    const int               GetFramePtr(const unsigned long & msTime, unsigned char *& pArray);
+    const int               GetFramePtr(const unsigned long & msTime, unsigned char *& pArray, const bool useRibbonTimeStrategy);
     void                    ReleaseFoundFrame();
 };
 

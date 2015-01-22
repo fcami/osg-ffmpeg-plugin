@@ -67,6 +67,7 @@ private:
     AVPacket                m_packet;
     bool                    m_isSrcAudioPlanar;
     AVSampleFormat          m_outSampleFormat;
+    double                  m_input_currTime;
 
     static const int        guessLayoutByChannelsNb(const int & chNb);
     static const int        calc_samples_get_buffer_size(const int & nb_samples, AVCodecContext * pCodecCtx);

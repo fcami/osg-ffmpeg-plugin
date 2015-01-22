@@ -79,6 +79,7 @@ FFmpegVideoReader::openFile(const char *filename,
     //
     long                    scaledWidth = 0;
     long                    scaledHeight = 0;
+    size_t                  threadNb = 0; // By default - autodetect thread number
     AVRational              framerate; framerate.den = 0;
     AVDictionaryEntry *     dictEntry;
     AVDictionary *          dict = *parameters->getOptions();
@@ -100,6 +101,11 @@ FFmpegVideoReader::openFile(const char *filename,
         {
             m_framerate = framerate;
         }
+    }
+    dictEntry = NULL;
+    while (dictEntry = av_dict_get(dict, "threads", dictEntry, 0))
+    {
+        threadNb = atoi(dictEntry->value);
     }
     if ((err = avformat_open_input(&fmt_ctx, filename, iformat, parameters->getOptions())) < 0)
     {
@@ -180,7 +186,7 @@ FFmpegVideoReader::openFile(const char *filename,
     pCodecCtx->thread_count = 1;
 #ifdef USE_AV_LOCK_MANAGER
     pCodecCtx->thread_type = FF_THREAD_FRAME;
-    pCodecCtx->thread_count = 0; // automatically search necessary value
+    pCodecCtx->thread_count = threadNb;
 #endif // USE_AV_LOCK_MANAGER
 // see: https://gitorious.org/libav/libav/commit/0b950fe240936fa48fd41204bcfd04f35bbf39c3
 // "introduce avcodec_open2() as a replacement for avcodec_open()."

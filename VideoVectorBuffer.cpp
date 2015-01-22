@@ -125,7 +125,9 @@ VideoVectorBuffer::release()
 *
 */
 const int
-VideoVectorBuffer::GetFramePtr(const unsigned long & msTime, unsigned char *& pArray)
+VideoVectorBuffer::GetFramePtr(const unsigned long & msTime,
+                                unsigned char *& pArray,
+                                const bool useRibbonTimeStrategy)
 {
     if (m_fileIndex < 0)
         return -1;
@@ -243,29 +245,35 @@ VideoVectorBuffer::GetFramePtr(const unsigned long & msTime, unsigned char *& pA
                 ui_maxT = ui;
             }
         }
-        //
-        // If streaming finished but someone wants frame, and buffer has not it, this is not error
-        //
-        if (isStreamFinished() == true)
+        if (useRibbonTimeStrategy)
         {
+            //
+            // Do not drop frames, and use latest available frame
+            // So if even some place of file have long decoding time-period, render playback will slow-down
+            // but later, when decoding speed-up, returns to necessary timing.
+            //
             searchRezult = ui_maxT;
         }
         else
         {
-#ifdef _DEBUG
-//            fprintf(stdout, "Buffered time not found for %d ms. Max avaiable %.0f ms. Deltlta %.0f ms\n", msTime, maxT, (double)msTime-maxT);
-#endif // _DEBUG
-            float   frameDurationMS     = 1000.0f / m_fps;
-            m_forcedFrameTimeMS         = msTime + frameDurationMS * 1;
-            if (m_forcedFrameTimeMS + frameDurationMS > m_videoLength)
-                m_forcedFrameTimeMS = m_videoLength - frameDurationMS;
             //
-            //return -(frameDurationMS + (msTime - maxT))/frameDurationMS;
+            // If streaming finished but someone wants frame, and buffer has not it, this is no error
+            //
+            if (isStreamFinished() == true)
+            {
+                searchRezult = ui_maxT;
+            }
+            else
+            {
+                float   frameDurationMS     = 1000.0f / m_fps;
+                m_forcedFrameTimeMS         = msTime + frameDurationMS * 1;
+                if (m_forcedFrameTimeMS + frameDurationMS > m_videoLength)
+                    m_forcedFrameTimeMS = m_videoLength - frameDurationMS;
 
-
-            // Use nearest (in time domain) frame
-            pArray = m_pool.m_ptr [ m_timeMappingList[ui_maxT].Ptr ];
-            return 1;
+                // Use nearest (in time domain) frame
+                pArray = m_pool.m_ptr [ m_timeMappingList[ui_maxT].Ptr ];
+                return 1;
+            }
         }
 
     }
