@@ -1,4 +1,7 @@
-/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2010 Robert Osfield
+/* Improved ffmpeg plugin for OpenSceneGraph - 
+ * Copyright (C) 1998-2010 Robert Osfield
+ * Modifications copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
+ * Modification author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
  * This library is open source and may be redistributed and/or modified under
  * the terms of the OpenSceneGraph Public License (OSGPL) version 0.0 or
@@ -10,6 +13,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * OpenSceneGraph Public License for more details.
 */
+
 
 #include "FFmpegHeaders.hpp"
 #include "FFmpegPlayer.hpp"
