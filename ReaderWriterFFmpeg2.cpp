@@ -165,12 +165,7 @@ fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() avformat_network_in
 
         if (! acceptsExtension(ext))
         {
-            //
-            // Notice about potential trouble.
-            // But it is not critical error because even file-extension does not exist in acceptable-list,
-            // file could be opened by ffmpeg.
-            //
-            OSG_WARN << "Plugin " << className() << " does not prepared for reading the file with extension \'" << osgDB::getLowerCaseFileExtension(filename) << "\' but will try to open it" << std::endl;
+        	return ReadResult::FILE_NOT_HANDLED;
         }
 
         const std::string path = osgDB::containsServerAddress(filename) ?
@@ -255,4 +250,4 @@ private:
 
 
 
-REGISTER_OSGPLUGIN(ffmpeg2, ReaderWriterFFmpeg2)
+REGISTER_OSGPLUGIN(ffmpeg, ReaderWriterFFmpeg2)
