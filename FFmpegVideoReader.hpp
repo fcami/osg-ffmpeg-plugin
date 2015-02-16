@@ -38,6 +38,7 @@ private:
     PixelFormat         m_pixelFormat;
     mutable bool        m_is_video_duration_determined;
     mutable int64_t     m_video_duration;
+    const bool          m_find_actual_duration;
     double              m_lastFoundInSeekTimeStamp_sec;
     bool                m_seekFoundLastTimeStamp;
 
@@ -54,6 +55,8 @@ private:
 public:
     AVFormatContext *   m_fmt_ctx_ptr;
     short               m_videoStreamIndex;
+
+                        FFmpegVideoReader();
     //
     // Search index of video-stream. If no one video-stream had not been found, return error.
     const int           openFile(const char *filename, FFmpegParameters * parameters, const bool useRGB_notBGR, float & aspectRatio, float & frame_rate, bool & alphaChannel);

@@ -27,6 +27,8 @@ namespace osgFFmpeg {
     #define SWS_OSG_CONVERSION_TYPE     SWS_FAST_BILINEAR   // for case, when frames save his resolution, it is enough to use the fastest case of scaling.
 #endif
 
+FFmpegVideoReader::FFmpegVideoReader():m_find_actual_duration(false){}
+
 const int
 FFmpegVideoReader::openFile(const char *filename,
                             FFmpegParameters * parameters,
@@ -365,100 +367,105 @@ FFmpegVideoReader::get_height(void) const
 const int64_t
 FFmpegVideoReader::get_duration(void) const
 {
-    if (m_is_video_duration_determined == false)
+    if (m_find_actual_duration)
     {
-        const float         lastFrameTime_ms = 1000.0f / get_fps();         // 1/fps*1000
-        m_video_duration = m_fmt_ctx_ptr->duration * 1000 / AV_TIME_BASE;   // milliseconds
-        //
-        // Subtract last frame duration.
-        //
-        m_video_duration -= lastFrameTime_ms;
-        //
-        // Try seek
-        //
-        const int           w           = m_new_width;
-        const int           h           = m_new_height;
-        const int           bufSize     = avpicture_get_size(m_pixelFormat, w, h);
-        unsigned char *     pBuf        = (unsigned char*)av_malloc (bufSize);
-        FFmpegVideoReader * this_ptr    = const_cast<FFmpegVideoReader *>(this);
-        int                 seek_rezult = this_ptr->seek(m_video_duration, pBuf);
-        if (seek_rezult < 0)
+        if (m_is_video_duration_determined == false)
         {
+            const float         lastFrameTime_ms = 1000.0f / get_fps();         // 1/fps*1000
+            m_video_duration = m_fmt_ctx_ptr->duration * 1000 / AV_TIME_BASE;   // milliseconds
             //
-            // Try use shadow-functionality of fundtion FFmpegVideoReader::seek(), when
-            // trying to seek last-position, iterator pass last frame(with last available timestamp)
+            // Subtract last frame duration.
             //
-            if (m_seekFoundLastTimeStamp == true)
+            m_video_duration -= lastFrameTime_ms;
+            //
+            // Try seek
+            //
+            const int           w           = m_new_width;
+            const int           h           = m_new_height;
+            const int           bufSize     = avpicture_get_size(m_pixelFormat, w, h);
+            unsigned char *     pBuf        = (unsigned char*)av_malloc (bufSize);
+            FFmpegVideoReader * this_ptr    = const_cast<FFmpegVideoReader *>(this);
+            int                 seek_rezult = this_ptr->seek(m_video_duration, pBuf);
+            if (seek_rezult < 0)
             {
-                m_video_duration = m_lastFoundInSeekTimeStamp_sec * 1000;
-                seek_rezult = 0;
+                //
+                // Try use shadow-functionality of fundtion FFmpegVideoReader::seek(), when
+                // trying to seek last-position, iterator pass last frame(with last available timestamp)
+                //
+                if (m_seekFoundLastTimeStamp == true)
+                {
+                    m_video_duration = m_lastFoundInSeekTimeStamp_sec * 1000;
+                    seek_rezult = 0;
+                }
             }
-        }
-        if (seek_rezult < 0)
-        {
-            // If we cannot determine time by represented duration-value,
-            // try to determine it by search of last-packet time
+            if (seek_rezult < 0)
+            {
+                // If we cannot determine time by represented duration-value,
+                // try to determine it by search of last-packet time
+                //
+                // Seek at start of video
+                //
+                seek_rezult = this_ptr->seek(0, pBuf);
+                //
+                // Start we should find guaranty.
+                //
+                if (seek_rezult >= 0)
+                {
+                    AVPacket                packet;
+                    //
+                    packet.data = NULL;
+                    while (true)
+                    {
+                        // Free old packet
+                        if(packet.data != NULL)
+                            av_free_packet(& packet);
+
+                        bool existRezult;
+                        // Read new packet
+                        do
+                        {
+                            existRezult = true;
+                            const int readPacketRez = av_read_frame(m_fmt_ctx_ptr, & packet);
+                            if(readPacketRez < 0)
+                            {
+                                if (readPacketRez == static_cast<int>(AVERROR_EOF) ||
+                                    m_fmt_ctx_ptr->pb->eof_reached)
+                                {
+                                    // File(all streams) finished
+                                }
+                                else {
+                                    OSG_FATAL << "av_read_frame() returned " << AvStrError(readPacketRez) << std::endl;
+                                    throw std::runtime_error("av_read_frame() failed");
+                                }
+
+                                existRezult = false;
+                                break;
+                            }
+                        } while (packet.stream_index != m_videoStreamIndex);
+                        if (existRezult)
+                        {
+                            m_video_duration = (packet.dts * av_q2d(m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base)) * 1000;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                    m_video_duration -= lastFrameTime_ms;
+                }
+            }
             //
             // Seek at start of video
             //
             seek_rezult = this_ptr->seek(0, pBuf);
-            //
-            // Start we should find guaranty.
-            //
-            if (seek_rezult >= 0)
-            {
-                AVPacket                packet;
-                //
-                packet.data = NULL;
-                while (true)
-                {
-                    // Free old packet
-                    if(packet.data != NULL)
-                        av_free_packet(& packet);
-
-                    bool existRezult;
-                    // Read new packet
-                    do
-                    {
-                        existRezult = true;
-                        const int readPacketRez = av_read_frame(m_fmt_ctx_ptr, & packet);
-                        if(readPacketRez < 0)
-                        {
-                            if (readPacketRez == static_cast<int>(AVERROR_EOF) ||
-                                m_fmt_ctx_ptr->pb->eof_reached)
-                            {
-                                // File(all streams) finished
-                            }
-                            else {
-                                OSG_FATAL << "av_read_frame() returned " << AvStrError(readPacketRez) << std::endl;
-                                throw std::runtime_error("av_read_frame() failed");
-                            }
-
-                            existRezult = false;
-                            break;
-                        }
-                    } while (packet.stream_index != m_videoStreamIndex);
-                    if (existRezult)
-                    {
-                        m_video_duration = (packet.dts * av_q2d(m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base)) * 1000;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-                m_video_duration -= lastFrameTime_ms;
-            }
+            av_free (pBuf);
+            m_is_video_duration_determined = true;
         }
-        //
-        // Seek at start of video
-        //
-        seek_rezult = this_ptr->seek(0, pBuf);
-        av_free (pBuf);
-        m_is_video_duration_determined = true;
+
+        return m_video_duration;
     }
 
-    return m_video_duration;
+    return m_fmt_ctx_ptr->duration * 1000 / AV_TIME_BASE; // milliseconds
 }
 
 bool
