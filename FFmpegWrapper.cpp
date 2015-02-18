@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -41,7 +41,7 @@ FFmpegWrapper::checkIndexVideoValid(const long indexFile)
     }
     else
     {
-        OSG_NOTICE << "Try access to unexist " << indexFile << " index of files" << std::endl;
+        av_log(NULL, AV_LOG_ERROR, "Try access to unexist %d index of files", indexFile);
     }
     return -1;
 }
@@ -49,7 +49,7 @@ FFmpegWrapper::checkIndexVideoValid(const long indexFile)
 const long
 FFmpegWrapper::openVideo(const char * pFileName,
                          FFmpegParameters * parameters,
-                         const bool useRGB_notBGR,
+                         AVPixelFormat & outPixFmt,
                          float & aspectRatio,
                          float & frame_rate,
                          bool & alphaChannel)
@@ -58,9 +58,10 @@ FFmpegWrapper::openVideo(const char * pFileName,
     FFmpegVideoReader* media = new FFmpegVideoReader();
     try
     {
-        int ret = media->openFile(pFileName, parameters, useRGB_notBGR, aspectRatio, frame_rate, alphaChannel);
+        int ret = media->openFile(pFileName, parameters, aspectRatio, frame_rate, alphaChannel);
         if (ret == 0)
         {
+            outPixFmt = media->getPixFmt();
             const long maxIndexVideoFiles = g_maxIndexVideoFiles;
 
             g_openedVideoFiles[maxIndexVideoFiles] = media;
@@ -182,7 +183,7 @@ FFmpegWrapper::getImage(const long indexFile, unsigned long msTime, unsigned cha
                 }
                 else
                 {
-                    OSG_NOTICE << "Video seeking: asked time is out of range" << std::endl;
+                    av_log(NULL, AV_LOG_WARNING, "Video seeking: asked time is out of range");
                 }
             }
         }
@@ -223,7 +224,7 @@ FFmpegWrapper::checkIndexAudioValid(const long indexFile)
     }
     else
     {
-        OSG_NOTICE << "Try access to unexist " << indexFile << " index of files" << std::endl;
+        av_log(NULL, AV_LOG_ERROR, "Try access to unexist %d index of files", indexFile);
     }
     return -1;
 }

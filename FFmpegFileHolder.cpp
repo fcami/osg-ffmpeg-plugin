@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -87,10 +87,54 @@ FFmpegFileHolder::getAudioFormat() const
     return m_audioFormat;
 }
 
+const AVPixelFormat
+FFmpegFileHolder::getPixFormat() const
+{
+    return m_pixFmt;
+}
+
+void
+FFmpegFileHolder::getGLPixFormats (const AVPixelFormat pixFmt, GLint & outInternalTexFmt, GLint & outPixFmt)
+{
+    outInternalTexFmt   = GL_RGB;
+    outPixFmt           = GL_RGB;
+
+    switch (pixFmt)
+    {
+        case AV_PIX_FMT_RGB24:
+        {
+            outInternalTexFmt = GL_RGB;
+            outPixFmt = GL_RGB;
+            break;
+        }
+        case AV_PIX_FMT_BGR24:
+        {
+            outInternalTexFmt = GL_RGB;
+            outPixFmt = GL_BGR;
+            break;
+        }
+        case AV_PIX_FMT_BGRA:
+        {
+            outInternalTexFmt = GL_RGBA;
+            outPixFmt = GL_BGRA;
+            break;
+        }
+        case AV_PIX_FMT_RGBA:
+        {
+            outInternalTexFmt = GL_RGBA;
+            outPixFmt = GL_RGBA;
+            break;
+        }
+        default:
+        {
+            av_log(NULL, AV_LOG_WARNING, "Cannot find GL pix format for libav pix format");
+        }
+    };
+}
+
 const short
 FFmpegFileHolder::open (const std::string & filename, FFmpegParameters* parameters)
 {
-    //todo: here we need copy implementationf of \parameters from the analogue
     if (m_audioIndex < 0 && m_videoIndex < 0)
     {
         //
@@ -123,12 +167,10 @@ FFmpegFileHolder::open (const std::string & filename, FFmpegParameters* paramete
         m_frameSize.Width                   = 640;  // default
         m_frameSize.Height                  = 480;  // values
         m_alpha_channel                     = false;
-        //
-        const bool useRGB_notBGR            = true; // all Video-data will be represented as RGB24
 
         m_videoIndex = FFmpegWrapper::openVideo(filename.c_str(),
                                                 parameters,
-                                                useRGB_notBGR,
+                                                m_pixFmt,
                                                 m_pixAspectRatio,
                                                 m_frame_rate,
                                                 m_alpha_channel);

@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -18,6 +18,7 @@
 #define HEADER_GUARD_FFMPEG_FILEHOLDER_H
 
 #include "FFmpegHeaders.hpp"
+#include <osg/ImageStream>
 #include <string>
 
 namespace osgFFmpeg {
@@ -57,6 +58,7 @@ class FFmpegFileHolder
     AudioFormat             m_audioFormat;
     //
     Size                    m_frameSize;
+    AVPixelFormat           m_pixFmt;
     float                   m_pixAspectRatio;
     float                   m_frame_rate;
     bool                    m_alpha_channel;
@@ -75,6 +77,8 @@ public:
     const float             pixelAspectRatio() const;
     const float             frameRate() const;
     const bool              alphaChannel() const;
+    const AVPixelFormat     getPixFormat() const;
+    static void             getGLPixFormats(const AVPixelFormat pixFmt, GLint & outInternalTexFmt, GLint & outPixFmt);
     //
     const unsigned long     duration_ms() const;
     //

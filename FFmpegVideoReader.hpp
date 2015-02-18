@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -18,6 +18,7 @@
 #define HEADER_GUARD_FFMPEG_VIDEOREADER_H
 
 #include "FFmpegHeaders.hpp"
+#include "FFmpegIExternalDecoder.hpp"
 
 namespace osgFFmpeg {
 
@@ -35,12 +36,13 @@ private:
     AVPacket            m_packet;
     AVFrame *           m_pSeekFrame;
     AVFrame *           m_pSrcFrame;
-    PixelFormat         m_pixelFormat;
+    AVPixelFormat       m_pixelFormat;
     mutable bool        m_is_video_duration_determined;
     mutable int64_t     m_video_duration;
-    const bool          m_find_actual_duration;
+    const bool          m_use_actual_duration;
     double              m_lastFoundInSeekTimeStamp_sec;
     bool                m_seekFoundLastTimeStamp;
+    FFmpegIExternalDecoder * m_pExtDecoder;
 
     unsigned int        m_new_width;
     unsigned int        m_new_height;
@@ -52,6 +54,7 @@ private:
     //  It is fast but frame will be with artifacts. If true - then no artifacts, but slowly.
     //  Has not depending, if [minReqTimeMS] < 0.
     bool                GetNextFrame(AVCodecContext *pCodecCtx, AVFrame *pFrame, unsigned long & currPacketPos, double & currTime, const size_t & drop_frame_nb = 0, const bool decodeTillMinReqTime = true, const double & minReqTimeMS = -1.0);
+    const int           ConvertToRGB(AVFrame * pSrcFrame, uint8_t * prealloc_buffer, unsigned char * ptrRGBmap);
 public:
     AVFormatContext *   m_fmt_ctx_ptr;
     short               m_videoStreamIndex;
@@ -59,7 +62,7 @@ public:
                         FFmpegVideoReader();
     //
     // Search index of video-stream. If no one video-stream had not been found, return error.
-    const int           openFile(const char *filename, FFmpegParameters * parameters, const bool useRGB_notBGR, float & aspectRatio, float & frame_rate, bool & alphaChannel);
+    const int           openFile(const char *filename, FFmpegParameters * parameters, float & aspectRatio, float & frame_rate, bool & alphaChannel);
     void                close(void);
     int                 seek(int64_t timestamp, unsigned char * ptrRGBmap);
     // buffer-size should be width*height*3 bytes;
@@ -74,6 +77,7 @@ public:
     const int           get_width(void) const;
     const int           get_height(void) const;
     const float         get_fps(void) const;
+    const AVPixelFormat getPixFmt(void) const;
     // max value for using in seek
     const int64_t       get_duration(void) const;
     float               findAspectRatio() const;

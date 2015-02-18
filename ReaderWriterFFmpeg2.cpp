@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 1998-2010 Robert Osfield
  * Modifications copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * Modification author: Oktay Radzhabov (oradzhabov at jazzros dot com)
@@ -29,7 +29,7 @@ extern "C" {
 
 static void log_to_osg(void *ptr, int level, const char *fmt, va_list vl)
 {
-    char logbuf[256];
+    char logbuf[1024];
     vsnprintf(logbuf, sizeof(logbuf), fmt, vl);
     logbuf[sizeof(logbuf) - 1] = '\0';
 
@@ -75,7 +75,10 @@ public:
 
     ReaderWriterFFmpeg2()
     {
-fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2()\n");
+        av_log_set_callback(log_to_osg);
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2()");
+
+
 
         supportsProtocol("http","Read video/audio from http using ffmpeg.");
         supportsProtocol("rtsp","Read video/audio from rtsp using ffmpeg.");
@@ -111,22 +114,21 @@ fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2()\n");
         supportsOption("audio_sample_rate", "Set audio sampling rate (e.g. 44100)");
         supportsOption("context",            "AVIOContext* for custom IO");
 
-        av_log_set_callback(log_to_osg);
-
 #ifdef USE_AV_LOCK_MANAGER
         // enable thread locking
         av_lockmgr_register(&lockMgr);
-fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() av_lockmgr_register()\n");
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() av_lockmgr_register()");
+
 #endif
         // Register all FFmpeg formats/codecs
         av_register_all();
-fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() av_register_all()\n");
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() av_register_all()");
 
 #if LIBAVFORMAT_VERSION_MAJOR >= 54
         avformat_network_init();
-fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() avformat_network_init()\n");
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() avformat_network_init()");
 #else
-        OSG_NOTICE << "This ver of libavformat does not support avformat_network_init()" << std::endl;
+        av_log(NULL, AV_LOG_INFO, "This ver of libavformat does not support avformat_network_init()");
 #endif
     }
 
@@ -136,7 +138,7 @@ fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() avformat_network_in
 #if LIBAVFORMAT_VERSION_MAJOR >= 54
         avformat_network_deinit();
 #else
-        OSG_NOTICE << "This ver of libavformat does not support avformat_network_deinit()" << std::endl;
+        av_log(NULL, AV_LOG_INFO, "This ver of libavformat does not support avformat_network_deinit()");
 #endif
     }
 
@@ -148,7 +150,9 @@ fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() avformat_network_in
     virtual ReadResult readImage(const std::string & filename, const osgDB::ReaderWriter::Options* options) const
     {
         const std::string ext = osgDB::getLowerCaseFileExtension(filename);
-        if (ext=="ffmpeg") return readImage(osgDB::getNameLessExtension(filename),options);
+
+        if (ext == "ffmpeg")
+            return readImage(osgDB::getNameLessExtension(filename),options);
 
         osg::ref_ptr<osgFFmpeg::FFmpegParameters> parameters(new osgFFmpeg::FFmpegParameters);
         parseOptions(parameters.get(), options);
@@ -180,7 +184,8 @@ fprintf (stdout, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() avformat_network_in
 
     ReadResult readImageStream(const std::string& filename, osgFFmpeg::FFmpegParameters* parameters) const
     {
-        OSG_INFO << "ReaderWriterFFmpeg2::readImage " << filename << std::endl;
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::readImage %s", filename.c_str());
+
 
         osg::ref_ptr<osgFFmpeg::FFmpegPlayer> image_stream(new osgFFmpeg::FFmpegPlayer);
 

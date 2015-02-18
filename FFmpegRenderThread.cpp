@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -16,6 +16,7 @@
 
 #include "FFmpegRenderThread.hpp"
 #include "FFmpegILibAvStreamImpl.hpp"
+#include "FFmpegFileHolder.hpp"
 #include <osg/Timer>
 
 namespace osgFFmpeg {
@@ -27,11 +28,11 @@ FFmpegRenderThread::~FFmpegRenderThread()
 }
 
 const int
-FFmpegRenderThread::Initialize(FFmpegILibAvStreamImpl * pSrc, osg::ImageStream * pDst, const Size & frameSize)
+FFmpegRenderThread::Initialize(FFmpegILibAvStreamImpl * pSrc, osg::ImageStream * pDst, const FFmpegFileHolder * pFileHolder)
 {
-    m_pLibAvStream = pSrc;
-    m_pImgStream = pDst;
-    m_frameSize = frameSize;
+    m_pFileHolder   = pFileHolder;
+    m_pLibAvStream  = pSrc;
+    m_pImgStream    = pDst;
 
     if (pSrc == NULL || pDst == NULL)
         return -1;
@@ -76,6 +77,10 @@ FFmpegRenderThread::run()
         double                  dist_frame_ms;
         int                     iErr;
         //
+        GLint                   internalTexFmt;
+        GLint                   pixFmt;
+        FFmpegFileHolder::getGLPixFormats (m_pFileHolder->getPixFormat(), internalTexFmt, pixFmt);
+        //
         while (m_renderingThreadStop == false)
         {
             //
@@ -105,16 +110,12 @@ FFmpegRenderThread::run()
                     }
                 }
                 m_pImgStream->setImage(
-                    m_frameSize.Width,
-                    m_frameSize.Height,
-                    1, GL_RGB, GL_RGB, GL_UNSIGNED_BYTE,
+                    m_pFileHolder->width(),
+                    m_pFileHolder->height(),
+                    1, internalTexFmt, pixFmt, GL_UNSIGNED_BYTE,
                     pFramePtr, osg::Image::NO_DELETE
                 );
                 tick_start_ms = loopTimer.time_m();
-            }
-            else
-            {
-                // fprintf (stdout, "pFramePtr = NULL in %\n");
             }
 
             m_pLibAvStream->ReleaseFoundFrame();

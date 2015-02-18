@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -25,6 +25,9 @@
 #include <sys/stat.h>
 
 namespace osgFFmpeg {
+
+AVRational osg_get_time_base_q(void);
+
 /*
 int64_t bigFileSize(const char *path)
 {
@@ -77,7 +80,9 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
     if (std::string(filename).compare(0, 5, "/dev/")==0)
     {
 #ifdef ANDROID
-        fprintf (stdout, "Device not supported on Android");
+
+        av_log(NULL, AV_LOG_ERROR, "Device not supported on Android");
+
         return -1;
 #else
         avdevice_register_all();
@@ -175,14 +180,14 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
     }
     if (m_audioStreamIndex < 0)
     {
-        fprintf(stderr, "Opened file has not audio-streams\n");
+        av_log(NULL, AV_LOG_WARNING, "Opened file has not audio-streams");
         return -1;
     }
     AVCodecContext *pCodecCtx = fmt_ctx->streams[m_audioStreamIndex]->codec;
     // Check stream sanity
     if (pCodecCtx->codec_id == AV_CODEC_ID_NONE)
     {
-        fprintf(stderr, "Invalid audio codec\n");
+        av_log(NULL, AV_LOG_ERROR, "Invalid audio codec");
         return -1;
     }
 
@@ -223,7 +228,7 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
     if (avcodec_open (pCodecCtx, codec) < 0)
 #endif
     {
-        fprintf(stderr, "Could not open the required codec for audio\n");
+        av_log(NULL, AV_LOG_ERROR, "Could not open the required codec for audio");
         return -1;
     }
 
@@ -276,7 +281,7 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
                 }
             default:
                 {
-                    fprintf (stderr, "Unsupported of plane audio sample format\n");
+                    av_log(NULL, AV_LOG_ERROR, "Unsupported of plane audio sample format");
                     return -1;
                 }
         };
@@ -289,7 +294,6 @@ FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
         //std::ifstream::pos_type filesize(const char* filename)
         {
             int64_t size = bigFileSize(filename);
-            int a = 0;
         }
     }
 */
@@ -477,7 +481,7 @@ FFmpegAudioReader::decodeAudio (int & buffer_size)
             dePlaneAudio (samples_nb, pCodecCtx, ptrArray);
         }
 #else // OSG_ABLE_PLANAR_AUDIO
-        fprintf (stdout, "ERROR: decoded audio is planar but used version of libavutil does not support it\n");
+        av_log(NULL, AV_LOG_ERROR, "Decoded audio is planar but used version of libavutil does not support it");
         return -1;
 #endif // OSG_ABLE_PLANAR_AUDIO
     }
@@ -546,7 +550,7 @@ FFmpegAudioReader::GetNextFrame(double & currTime, int16_t * output_buffer, unsi
 
                 pts *= av_q2d(m_fmt_ctx_ptr->streams[m_audioStreamIndex]->time_base);
 #ifdef FFMPEG_DEBUG
-                fprintf (stdout, "pts: %f\n", pts);
+                av_log(NULL, AV_LOG_DEBUG, "pts: %f", pts);
 #endif // FFMPEG_DEBUG
                 currTime = pts;
                 memcpy (output_buffer, m_decode_buffer, buffer_size/*value of this variable in bytes*/);
@@ -621,14 +625,9 @@ FFmpegAudioReader::seek(int64_t timestamp )
     if (m_fmt_ctx_ptr->start_time != AV_NOPTS_VALUE)
         timestamp += m_fmt_ctx_ptr->start_time;
 
-    int64_t         seek_target     = timestamp;
-    {
-        AVRational q;
-        q.num = 1;
-        q.den = AV_TIME_BASE;
-
-        seek_target= av_rescale_q (timestamp, q, m_fmt_ctx_ptr->streams[m_audioStreamIndex]->time_base);
-    }
+    int64_t seek_target = av_rescale_q (timestamp,
+                                        osg_get_time_base_q(),
+                                        m_fmt_ctx_ptr->streams[m_audioStreamIndex]->time_base);
 
     m_FirstFrame = true;
 
@@ -637,7 +636,7 @@ FFmpegAudioReader::seek(int64_t timestamp )
     const int seekVal = av_seek_frame(m_fmt_ctx_ptr, m_audioStreamIndex, seek_target, seek_flags);
     if (seekVal < 0)
     {
-        fprintf (stderr, "Cannot seek audio frame\n");
+        av_log(NULL, AV_LOG_ERROR, "Cannot seek audio frame");
         return -1;
     }
 
@@ -897,7 +896,7 @@ FFmpegAudioReader::getSamples(FFmpegAudioReader* input_audio,
                 er = swr_init(input_audio->m_audio_swr_cntx);
                 if (er != 0)
                 {
-                    fprintf (stderr, "Cannot init resampler for video\n");
+                    av_log(NULL, AV_LOG_ERROR, "Cannot init resampler for audio");
                     return -1;
                 }
             }

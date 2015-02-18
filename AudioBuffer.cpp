@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -14,6 +14,7 @@
 */
 
 
+#include "FFmpegHeaders.hpp"
 #include "AudioBuffer.hpp"
 #include <memory>
 
@@ -123,7 +124,8 @@ AudioBuffer::read (void * buffer, const int & bytesNb)
         for (i = 0; i < ratio_10; ++i)
             bufferFillState[i] = '|';
         bufferFillState[i] = 0;
-        fprintf (stdout, "%s\n", bufferFillState);
+
+        av_log(NULL, AV_LOG_DEBUG, "AudioBuf: %s", bufferFillState);
     }
 */
     // Fix local value of cross-thread params

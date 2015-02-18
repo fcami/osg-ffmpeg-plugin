@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 1998-2010 Robert Osfield
  * Modifications copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * Modification author: Oktay Radzhabov (oradzhabov at jazzros dot com)
@@ -61,7 +61,7 @@ void FFmpegAudioStream::consumeAudioBuffer(void * const buffer, const size_t siz
     {
         const AudioFormat   audioFormat = m_pFileHolder->getAudioFormat();
         playbackSec = (double)size / (double)(audioFormat.m_sampleRate * audioFormat.m_bytePerSample * audioFormat.m_channelsNb);
-        OSG_NOTICE << "Consumed audio chunk: " << playbackSec << " sec" << std::endl;
+        av_log(NULL, AV_LOG_INFO, "Consumed audio chunk: %f sec", playbackSec);
     }
 
     m_streamer->audio_fillBuffer(buffer, size);

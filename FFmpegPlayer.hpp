@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -27,7 +27,7 @@
 namespace osgFFmpeg {
 
 // This parameter should be incremented each time before commit to repository
-#define OSG_FFMPEG_PLUGIN_RELEASE_VERSION_INT   6
+#define OSG_FFMPEG_PLUGIN_RELEASE_VERSION_INT   10
 
 
 template <class T>
@@ -62,7 +62,7 @@ public:
 
     virtual double              getCreationTime() const;
     virtual double              getLength() const;
-    virtual double              getReferenceTime () const; 
+    virtual double              getReferenceTime () const;
     virtual double              getCurrentTime() const;
     virtual double              getFrameRate() const;
 

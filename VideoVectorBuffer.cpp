@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -97,14 +97,14 @@ VideoVectorBuffer::alloc(const FFmpegFileHolder * pHolder)
         {
             ScopedLock  lock (m_mutex);
 
-            m_frameSize = 3 * pHolder->width() * pHolder->height();
+            m_frameSize = avpicture_get_size(pHolder->getPixFormat(), pHolder->width(), pHolder->height());
 
             const size_t    partOfPhysicMemorySizeInBytes = floor((double)getMemorySize() / 4.0); // could return 0
             const size_t    available_frame_nb = partOfPhysicMemorySizeInBytes > 0 ? (std::min<size_t>(20, floor((double)partOfPhysicMemorySizeInBytes / (double)m_frameSize))) : 20;
 
             m_pool.alloc(m_frameSize, available_frame_nb);
 
-            fprintf (stdout, "Video allocs pool for %d frames\n", m_pool.FrameCount());
+            av_log(NULL, AV_LOG_INFO, "Video allocs pool for %d frames\n", m_pool.FrameCount());
             //
             // Determine time-stamp between frames
             //
@@ -172,7 +172,7 @@ VideoVectorBuffer::GetFramePtr(const unsigned long & msTime,
         for (i = 0; i < ratio_10; ++i)
             bufferFillState[i] = '|';
         bufferFillState[i] = 0;
-        fprintf (stdout, "%s\n", bufferFillState);
+        av_log(NULL, AV_LOG_DEBUG, "VideoBuf: %s", bufferFillState);
     }
 */
     pArray = NULL;
