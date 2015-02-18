@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -54,9 +54,8 @@ public:
     //
     // Notes:
     // - No one exception throws from function;
-    // - If [useRGB_notBGR] == true, all Video-data will be represented as RGB24, otherwise as BGR24
     // - If opened media-file has not video-stream, return error;
-    static const long  openVideo(const char * pFileName, FFmpegParameters * parameters, const bool useRGB_notBGR, float & aspectRatio, float & frame_rate, bool & alphaChannel);
+    static const long  openVideo(const char * pFileName, FFmpegParameters * parameters, AVPixelFormat & outPixFmt, float & aspectRatio, float & frame_rate, bool & alphaChannel);
 
     // Close Video-file(opened by [openVideo])
     //

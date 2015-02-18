@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -79,8 +79,12 @@ bool FFmpegPlayer::open(const std::string & filename, FFmpegParameters* paramete
         return false;
     }
 
+    GLint                   internalTexFmt;
+    GLint                   pixFmt;
+    FFmpegFileHolder::getGLPixFormats (m_fileHolder.getPixFormat(), internalTexFmt, pixFmt);
+
     setImage(
-        m_fileHolder.width(), m_fileHolder.height(), 1, GL_RGB, GL_RGB, GL_UNSIGNED_BYTE,
+        m_fileHolder.width(), m_fileHolder.height(), 1, internalTexFmt, pixFmt, GL_UNSIGNED_BYTE,
         const_cast<unsigned char *>(m_streamer.getFrame()), NO_DELETE
     );
 
@@ -265,7 +269,7 @@ void FFmpegPlayer::run()
     }
 
     OSG_NOTICE<<"Finished FFmpegPlayer::run()"<<std::endl;
-    
+
     // Ensure that all threads are closed
     cmdPause();
     //

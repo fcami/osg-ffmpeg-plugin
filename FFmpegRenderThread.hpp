@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -24,12 +24,13 @@
 namespace osgFFmpeg {
 
 class FFmpegILibAvStreamImpl;
+class FFmpegFileHolder;
 
 class FFmpegRenderThread : protected OpenThreads::Thread
 {
     osg::ImageStream            * m_pImgStream;
     FFmpegILibAvStreamImpl      * m_pLibAvStream;
-    Size                        m_frameSize;
+    const FFmpegFileHolder      * m_pFileHolder;
     volatile bool               m_renderingThreadStop;
 
     virtual void                run();
@@ -37,7 +38,7 @@ public:
 
     virtual                     ~FFmpegRenderThread();
 
-    const int                   Initialize(FFmpegILibAvStreamImpl *, osg::ImageStream *, const Size &);
+    const int                   Initialize(FFmpegILibAvStreamImpl *, osg::ImageStream *, const FFmpegFileHolder * pFileHolder);
 
     void                        Start();
     void                        Stop();

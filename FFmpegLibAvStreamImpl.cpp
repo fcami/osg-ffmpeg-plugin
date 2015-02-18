@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -67,14 +67,14 @@ FFmpegLibAvStreamImpl::setAudioSink(osg::AudioSink * audio_sink)
 void
 FFmpegLibAvStreamImpl::setAudioDelayMicroSec (const double & audioDelayMicroSec)
 {
-fprintf (stdout, "setAudioDelayMicroSec() %f\n", audioDelayMicroSec);
     m_audioDelayMicroSec = audioDelayMicroSec;
 }
 
 const int
 FFmpegLibAvStreamImpl::initialize(const FFmpegFileHolder * pHolder, FFmpegPlayer * pPlayer)
 {
-fprintf (stdout, "FFmpegLibAvStreamImpl::initialize()\n");
+    av_log(NULL, AV_LOG_INFO, "FFmpegLibAvStreamImpl::initialize()");
+
     m_frame_rate = 1;
     m_audioFormat.clear();
     m_audioIndex = pHolder->audioIndex();
@@ -95,7 +95,7 @@ fprintf (stdout, "FFmpegLibAvStreamImpl::initialize()\n");
             m_audio_buffer.release();
             m_audioIndex = -1;
 
-            OSG_NOTICE << "Cannot alloc audio buffer" << std::endl;
+            av_log(NULL, AV_LOG_ERROR, "Cannot alloc audio buffer");
         }
     }
     //
@@ -107,22 +107,21 @@ fprintf (stdout, "FFmpegLibAvStreamImpl::initialize()\n");
         {
             m_video_buffer.release();
             m_videoIndex = -1;
-            OSG_NOTICE << "Cannot alloc video buffer" << std::endl;
+            av_log(NULL, AV_LOG_ERROR, "Cannot alloc video buffer");
         }
         else
         {
             if (m_renderer.Initialize (this,
                                     m_pPlayer,
-                                    Size(pHolder->width(), pHolder->height())
-                                    ) < 0)
+                                    pHolder) < 0)
             {
                 m_video_buffer.release();
                 m_videoIndex = -1;
-                OSG_NOTICE << "Cannot initialize render thread" << std::endl;
+                av_log(NULL, AV_LOG_ERROR, "Cannot initialize render thread");
             }
         }
     }
-fprintf (stdout, "FFmpegLibAvStreamImpl::initialize() finished\n");
+    av_log(NULL, AV_LOG_INFO, "FFmpegLibAvStreamImpl::initialize() finished");
 
     return (isHasAudio() || isHasVideo()) ? 0 : -1;
 }
@@ -158,8 +157,7 @@ FFmpegLibAvStreamImpl::GetPlaybackTime() const
 void
 FFmpegLibAvStreamImpl::Start()
 {
-fprintf (stdout, "FFmpegLibAvStreamImpl::Start()\n");
-
+    av_log(NULL, AV_LOG_INFO, "FFmpegLibAvStreamImpl::Start()");
     //
     // Guaranty that thread will starts even if it was run before
     //
@@ -208,22 +206,30 @@ FFmpegLibAvStreamImpl::Seek(const unsigned long & newTimeMS)
 const bool
 FFmpegLibAvStreamImpl::detectIsItImplementedAudioVolume()
 {
-fprintf (stdout, "FFmpegLibAvStreamImpl::detectIsItImplementedAudioVolume()\n");
+    av_log(NULL, AV_LOG_INFO, "FFmpegLibAvStreamImpl::detectIsItImplementedAudioVolume()");
     bool    result = false;
     if (m_audio_sink.valid())
     {
         const float prevAudioVolume = m_audio_sink->getVolume();
+        const float minFloat = std::numeric_limits<float>::min() * 2.0f;
 
         m_audio_sink->setVolume(0.3f);
-        if ((m_audio_sink->getVolume() - 0.3f) > 1.e-3)
+        if (fabs(m_audio_sink->getVolume() - 0.3f) < minFloat)
             result = true;
 
         m_audio_sink->setVolume(0.9f);
-        if ((m_audio_sink->getVolume() - 0.9f) > 1.e-3)
+        if (fabs(m_audio_sink->getVolume() - 0.9f) < minFloat)
             result = true;
 
         // Return previous audio volume
         m_audio_sink->setVolume(prevAudioVolume);
+        //
+        //
+        //
+        if (result)
+            av_log(NULL, AV_LOG_INFO, "AudioSink able to control audio volume");
+        else
+            av_log(NULL, AV_LOG_INFO, "AudioSink not able to control audio volume");
     }
     return result;
 }

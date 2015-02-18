@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 1998-2010 Robert Osfield
  * Modifications copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * Modification author: Oktay Radzhabov (oradzhabov at jazzros dot com)
@@ -36,7 +36,7 @@ extern "C"
     #include <libavutil/pixdesc.h>
 }
 
-inline PixelFormat osg_av_get_pix_fmt(const char *name) { return av_get_pix_fmt(name); }
+inline AVPixelFormat osg_av_get_pix_fmt(const char *name) { return av_get_pix_fmt(name); }
 
 
 namespace osgFFmpeg {

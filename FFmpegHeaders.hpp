@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 1998-2010 Robert Osfield
  * Modifications copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * Modification author: Oktay Radzhabov (oradzhabov at jazzros dot com)
@@ -27,6 +27,14 @@ extern "C"
 #include <stdint.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+
+#if defined(__unix__) || defined(__unix) || defined(unix)
+    // When VDPAU will be available, uncomment it
+    // #define USE_VDPAU
+    #include <vdpau/vdpau.h> // do not forget call "sudo apt-get libvdpau-dev" and add library libvdpau.a
+    #include <libavcodec/vdpau.h>
+#endif
+
 #ifndef AV_CH_LAYOUT_STEREO
 	#include <libavutil/channel_layout.h> // Appears to be needed specifically for versions on some Linux distros
 #endif
@@ -37,8 +45,9 @@ extern "C"
 
 #include <libavutil/mathematics.h>
 #include <libavutil/parseutils.h>
+#include <libavutil/pixdesc.h>
 
-#ifdef USE_SWSCALE    
+#ifdef USE_SWSCALE
     #include <libswscale/swscale.h>
 #endif
 
@@ -67,7 +76,7 @@ extern "C"
 // So, to use modern way (if available) of resampling, we should modify CMake-environment before preparing OSG-solution.
 // tips:
 // 1. Modify "./src/CMakeModules/FindFFmpeg.cmake"
-//  
+//
 // add follow line:
 //
 // FFMPEG_FIND(LIBSWRESAMPLE  swresample  swresample.h)
@@ -138,17 +147,17 @@ extern "C"
 class FormatContextPtr
 {
     public:
-    
+
         typedef AVFormatContext T;
-    
+
         explicit FormatContextPtr() : _ptr(0) {}
         explicit FormatContextPtr(T* ptr) : _ptr(ptr) {}
-        
+
         ~FormatContextPtr()
         {
             cleanup();
         }
-        
+
         T* get() { return _ptr; }
 
         operator bool() const { return _ptr != 0; }
@@ -158,7 +167,7 @@ class FormatContextPtr
             return _ptr;
         }
 
-        void reset(T* ptr) 
+        void reset(T* ptr)
         {
             if (ptr==_ptr) return;
             cleanup();
@@ -167,7 +176,7 @@ class FormatContextPtr
 
         void cleanup()
         {
-            if (_ptr) 
+            if (_ptr)
             {
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(53, 17, 0)
                 OSG_NOTICE<<"Calling avformat_close_input("<<&_ptr<<")"<<std::endl;
@@ -179,11 +188,11 @@ class FormatContextPtr
             }
             _ptr = 0;
         }
-        
-        
+
+
 
     protected:
-    
+
         T* _ptr;
 };
 

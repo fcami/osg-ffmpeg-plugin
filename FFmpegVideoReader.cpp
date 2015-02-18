@@ -1,4 +1,4 @@
-/* Improved ffmpeg plugin for OpenSceneGraph - 
+/* Improved ffmpeg plugin for OpenSceneGraph -
  * Copyright (C) 2014-2015 Digitalis Education Solutions, Inc. (http://DigitalisEducation.com)
  * File author: Oktay Radzhabov (oradzhabov at jazzros dot com)
  *
@@ -16,6 +16,9 @@
 
 #include "FFmpegVideoReader.hpp"
 #include "FFmpegParameters.hpp"
+#ifdef USE_VDPAU
+    #include "VDPAU/VDPAUDecoder.hpp"
+#endif // USE_VDPAU
 #include <OpenThreads/Thread>
 #include <osg/Timer>
 #include <string>
@@ -24,15 +27,27 @@
 namespace osgFFmpeg {
 
 #ifdef USE_SWSCALE
-    #define SWS_OSG_CONVERSION_TYPE     SWS_FAST_BILINEAR   // for case, when frames save his resolution, it is enough to use the fastest case of scaling.
+    // The fastest: SWS_POINT
+    // Compromise: SWS_FAST_BILINEAR
+    #define SWS_OSG_CONVERSION_TYPE     SWS_FAST_BILINEAR// for case, when frames save his resolution, it is enough to use the fastest case of scaling.
 #endif
 
-FFmpegVideoReader::FFmpegVideoReader():m_find_actual_duration(false){}
+AVRational osg_get_time_base_q(void)
+{
+    AVRational  q;
+
+    q.num = 1;
+    q.den = AV_TIME_BASE;
+
+    return q;
+}
+
+FFmpegVideoReader::FFmpegVideoReader():m_use_actual_duration(false){}
+
 
 const int
 FFmpegVideoReader::openFile(const char *filename,
                             FFmpegParameters * parameters,
-                            const bool useRGB_notBGR,
                             float & aspectRatio,
                             float & frame_rate,
                             bool & par_alphaChannel)
@@ -51,12 +66,13 @@ FFmpegVideoReader::openFile(const char *filename,
     m_pSrcFrame                         = NULL;
     m_is_video_duration_determined      = 0;
     m_video_duration                    = 0;
-    m_pixelFormat                       = (useRGB_notBGR == true) ? PIX_FMT_RGB24 : PIX_FMT_BGR24;
+    m_pExtDecoder                       = NULL;
+    m_pixelFormat                       = PIX_FMT_BGR24; // Default value for case w/o HW acceleration
 
     if (std::string(filename).compare(0, 5, "/dev/")==0)
     {
 #ifdef ANDROID
-        fprintf (stdout, "Device not supported on Android");
+        av_log(NULL, AV_LOG_ERROR, "Device not supported on Android");
         return -1;
 #else
         avdevice_register_all();
@@ -127,7 +143,7 @@ FFmpegVideoReader::openFile(const char *filename,
     }
     if ((err = avformat_open_input(&fmt_ctx, filename, iformat, parameters->getOptions())) < 0)
     {
-        OSG_NOTICE << "Cannot open file " << filename << " for video" << std::endl;
+        av_log(NULL, AV_LOG_ERROR, "Cannot open file %s for video", filename);
         return err;
     }
     //
@@ -174,17 +190,39 @@ FFmpegVideoReader::openFile(const char *filename,
     }
     if (m_videoStreamIndex < 0)
     {
-        fprintf(stderr, "Opened file has not video-streams\n");
+        av_log(NULL, AV_LOG_WARNING, "Opened file has not video-streams");
         return -1;
     }
     AVCodecContext *pCodecCtx = fmt_ctx->streams[m_videoStreamIndex]->codec;
     // Check stream sanity
     if (pCodecCtx->codec_id == AV_CODEC_ID_NONE)
     {
-        fprintf(stderr, "Invalid video codec\n");
+        av_log(NULL, AV_LOG_ERROR, "Invalid video codec");
         return -1;
     }
-    AVCodec* codec = avcodec_find_decoder(pCodecCtx->codec_id);
+    AVCodec* codec = NULL;
+    bool bUseHardwareAcceleration = false;
+    if (bUseHardwareAcceleration)
+    {
+#ifdef USE_VDPAU
+        m_pExtDecoder       = new osgVDPAU::VDPAUDecoder;
+        codec               = m_pExtDecoder->openCodec(pCodecCtx, fmt_ctx->streams[m_videoStreamIndex]);
+
+        if (codec != NULL)
+        {
+            m_pixelFormat = m_pExtDecoder->GetOutPixFmt();
+        }
+        else
+        {
+            delete m_pExtDecoder;
+            m_pExtDecoder = NULL;
+        }
+#endif // USE_VDPAU
+    }
+    // If codec still not defined, use avcodec
+    if (codec == NULL)
+        codec = avcodec_find_decoder(pCodecCtx->codec_id);
+
     /**
 
     See: http://permalink.gmane.org/gmane.comp.video.libav.api/228
@@ -221,7 +259,7 @@ FFmpegVideoReader::openFile(const char *filename,
     if (avcodec_open (pCodecCtx, codec) < 0)
 #endif
     {
-        fprintf(stderr, "Could not open the required codec for video\n");
+        av_log(NULL, AV_LOG_ERROR, "Could not open the required codec for video");
         return -1;
     }
 
@@ -279,9 +317,9 @@ FFmpegVideoReader::openFile(const char *filename,
     //
     get_duration();
     //
-    aspectRatio = findAspectRatio();
-    frame_rate = get_fps();
-    par_alphaChannel = alphaChannel();
+    aspectRatio         = findAspectRatio();
+    frame_rate          = get_fps();
+    par_alphaChannel    = alphaChannel();
 
     return 0;
 }
@@ -321,6 +359,11 @@ FFmpegVideoReader::close(void)
 #endif
         m_fmt_ctx_ptr = NULL;
     }
+    if (m_pExtDecoder)
+    {
+        delete m_pExtDecoder;
+        m_pExtDecoder = NULL;
+    }
 }
 
 float
@@ -351,6 +394,12 @@ FFmpegVideoReader::get_fps(void) const
     return  av_q2d (m_framerate);
 }
 
+const AVPixelFormat
+FFmpegVideoReader::getPixFmt(void) const
+{
+    return m_pixelFormat;
+}
+
 const int
 FFmpegVideoReader::get_width(void) const
 {
@@ -367,7 +416,7 @@ FFmpegVideoReader::get_height(void) const
 const int64_t
 FFmpegVideoReader::get_duration(void) const
 {
-    if (m_find_actual_duration)
+    if (m_use_actual_duration == true)
     {
         if (m_is_video_duration_determined == false)
         {
@@ -465,7 +514,7 @@ FFmpegVideoReader::get_duration(void) const
         return m_video_duration;
     }
 
-    return m_fmt_ctx_ptr->duration * 1000 / AV_TIME_BASE; // milliseconds
+    return m_fmt_ctx_ptr->duration * 1000 / AV_TIME_BASE;   // milliseconds
 }
 
 bool
@@ -506,7 +555,7 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
             // Was there an error?
             if(bytesDecoded < 0)
             {
-                fprintf(stderr, "Error while decoding frame\n");
+                av_log(NULL, AV_LOG_WARNING, "Error while decoding frame");
                 return false;
             }
             m_bytesRemaining -= bytesDecoded;
@@ -549,7 +598,7 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
                 if (frameFinished && continue_read_packets == false)
                 {
 #ifdef FFMPEG_DEBUG
-                    fprintf (stdout, "pts: %f\n", pts);
+                    av_log(NULL, AV_LOG_DEBUG, "pts: %f", pts);
 #endif // FFMPEG_DEBUG
                     currTime = pts;
 
@@ -575,7 +624,7 @@ FFmpegVideoReader::GetNextFrame(AVCodecContext *pCodecCtx,
 #ifdef FFMPEG_DEBUG
             int64_t l_pts = m_packet.pts;
             int64_t l_dts = m_packet.dts;
-            fprintf (stdout, "m_packet.pts = %lu; m_packet.dts = %lu; m_packet.pos = %lu;\n",
+            av_log(NULL, AV_LOG_DEBUG, "m_packet.pts = %lu; m_packet.dts = %lu; m_packet.pos = %lu;",
                 (int)l_pts,
                 (int)l_dts,
                 (int)m_packet.pos);
@@ -672,40 +721,20 @@ FFmpegVideoReader::grabNextFrame(uint8_t * buffer, double & timeStampInSec, cons
     {
         return -1;
     }
+    pFrameRGB->width = m_new_width;
+    pFrameRGB->height = m_new_height;
+    //
 osg::Timer              loc_timer;
 
     // Assign appropriate parts of buffer to image planes in pFrameRGB
-    avpicture_fill ((AVPicture *)pFrameRGB, buffer, m_pixelFormat, m_new_width, m_new_height);
+//    avpicture_fill ((AVPicture *)pFrameRGB, buffer, m_pixelFormat, m_new_width, m_new_height);
 const double            timer_0_ms      = loc_timer.time_m();
     if (GetNextFrame(pCodecCtx, m_pSrcFrame, packetPos, timeStampInSec, drop_frame_nb, decodeTillMinReqTime, minReqTimeMS))
     {
-        // Convert image to necessary format
-#ifdef USE_SWSCALE
-        if(img_convert_ctx == NULL)
-        {
-            img_convert_ctx = sws_getContext(pCodecCtx->width, pCodecCtx->height,
-                                            pCodecCtx->pix_fmt,
-                                            m_new_width, m_new_height,
-                                            m_pixelFormat,
-                                            SWS_OSG_CONVERSION_TYPE, NULL, NULL, NULL);
-            if(img_convert_ctx == NULL)
-            {
-                OSG_FREE_FRAME  (& pFrameRGB);
-
-                fprintf(stderr, "Cannot initialize the video conversion context\n");
-                return -1;
-            }
-        }
 const double            timer_1_ms      = loc_timer.time_m();
 
-        sws_scale(img_convert_ctx, m_pSrcFrame->data,
-                  m_pSrcFrame->linesize, 0,
-                  pCodecCtx->height,
-                  pFrameRGB->data, pFrameRGB->linesize);
-#else
-        img_convert(pFrameRGB->data, m_pixelFormat, m_pSrcFrame->data,
-                    pCodecCtx->pix_fmt, pCodecCtx->width, pCodecCtx->height);
-#endif
+        ConvertToRGB(m_pSrcFrame, buffer, NULL);
+
 const double            timer_2_ms      = loc_timer.time_m();
 static size_t   statistic_counter = 0;
 static size_t   statistic_counter_nb = 100;
@@ -728,9 +757,9 @@ if (statistic_counter < statistic_counter_nb)
     //
     if (statistic_counter == statistic_counter_nb)
     {
-        fprintf (stdout, "Statistics:\n");
-        fprintf (stdout, " GetNextFrame avg/max [ms]: %d/%d\n", (int)((double)statistic_GetNextFrame_sum / (double)statistic_counter), statistic_GetNextFrame_max);
-        fprintf (stdout, " Frame Scale avg/max [ms]: %d/%d\n", (int)((double)statistic_ImgScale_sum / (double)statistic_counter), statistic_ImgScale_max);
+        av_log(NULL, AV_LOG_DEBUG, "Statistics:");
+        av_log(NULL, AV_LOG_DEBUG, " GetNextFrame avg/max [ms]: %d/%d", (int)((double)statistic_GetNextFrame_sum / (double)statistic_counter), statistic_GetNextFrame_max);
+        av_log(NULL, AV_LOG_DEBUG, " Frame Scale avg/max [ms]: %d/%d", (int)((double)statistic_ImgScale_sum / (double)statistic_counter), statistic_ImgScale_max);
         statistic_counter = 0;
         statistic_GetNextFrame_sum = 0;
         statistic_GetNextFrame_max = 0;
@@ -740,7 +769,7 @@ if (statistic_counter < statistic_counter_nb)
     }
 }
 /*
-fprintf (stdout, "GetNextFrame + sws_scale spent %3d %3d ms Time: %4d ms DTMRT: %d(%4d)\n", (int)(timer_1_ms - timer_0_ms), (int)(timer_2_ms - timer_1_ms), (int)(timeStampInSec*1000),
+av_log(NULL, AV_LOG_DEBUG, "GetNextFrame + sws_scale spent %3d %3d ms Time: %4d ms DTMRT: %d(%4d)", (int)(timer_1_ms - timer_0_ms), (int)(timer_2_ms - timer_1_ms), (int)(timeStampInSec*1000),
          decodeTillMinReqTime ? 1 : 0,
          (int)minReqTimeMS);
 */
@@ -756,7 +785,6 @@ FFmpegVideoReader::seek(int64_t timestamp/*milliseconds*/, unsigned char * ptrRG
 {
     if (ptrRGBmap == NULL)
     {
-        fprintf (stderr, "Parameter is NULL\n");
         return -1;
     }
 
@@ -772,18 +800,16 @@ FFmpegVideoReader::seek(int64_t timestamp/*milliseconds*/, unsigned char * ptrRG
     if (m_fmt_ctx_ptr->start_time != AV_NOPTS_VALUE)
         timestamp += m_fmt_ctx_ptr->start_time;
 
-    int64_t         seek_target     = timestamp;
-    {
-        AVRational a;
-        a.num = 1;
-        a.den = AV_TIME_BASE;
-
-        seek_target = av_rescale_q (timestamp, a, m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
-    }
+    int64_t         seek_target     = av_rescale_q (timestamp,
+                                                    osg_get_time_base_q(),
+                                                    m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
 
     m_FirstFrame = true;
 
-    int             retValueSeekFrame = av_seek_frame (m_fmt_ctx_ptr, m_videoStreamIndex, seek_target, AVSEEK_FLAG_BACKWARD);
+    int             retValueSeekFrame = av_seek_frame ( m_fmt_ctx_ptr,
+                                                        m_videoStreamIndex,
+                                                        seek_target,
+                                                        AVSEEK_FLAG_BACKWARD);
     //
     // Try to resolve TROUBLE by seeking with other flags.
     // When I want seek(0), AVSEEK_FLAG_BACKWARD returns ERROR, but AVSEEK_FLAG_ANY returns OK but not
@@ -810,12 +836,10 @@ FFmpegVideoReader::seek(int64_t timestamp/*milliseconds*/, unsigned char * ptrRG
             //
             while (timeLoopPrev > requiredTime && seek_target > 0)
             {
-                AVRational q;
-                q.num = 1;
-                q.den = AV_TIME_BASE;
-
                 // Go-back with 0.1-sec step till seek found WELL-rezults.
-                seek_target -= av_rescale_q(AV_TIME_BASE * 0.1, q, m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
+                seek_target -= av_rescale_q(AV_TIME_BASE * 0.1,
+                                            osg_get_time_base_q(),
+                                            m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
                 av_seek_frame(m_fmt_ctx_ptr, m_videoStreamIndex, seek_target, AVSEEK_FLAG_BACKWARD);
                 bSuccess = GetNextFrame(pCodecCtx, m_pSeekFrame, packetPosLoop, timeLoop);
                 timeLoopPrev = timeLoop;
@@ -846,60 +870,84 @@ FFmpegVideoReader::seek(int64_t timestamp/*milliseconds*/, unsigned char * ptrRG
                     return -1;
                 }
             }
-            //
-            //
-            const int   rgbFrameSize    = avpicture_get_size(m_pixelFormat, m_new_width, m_new_height);
-            AVFrame *   pFrameRGB       = OSG_ALLOC_FRAME();
-            if(pFrameRGB==NULL)
-                return -1;
-            // Determine required buffer size and allocate buffer
-            uint8_t *   buffer          = (uint8_t*)av_malloc(rgbFrameSize);
-
-            // Assign appropriate parts of buffer to image planes in pFrameRGB
-            avpicture_fill((AVPicture *)pFrameRGB, buffer, m_pixelFormat, m_new_width, m_new_height);
-            //
-            // Convert the image into necessary format
-#ifdef USE_SWSCALE
-            if(img_convert_ctx == NULL)
-            {
-                img_convert_ctx = sws_getContext(pCodecCtx->width, pCodecCtx->height,
-                                                pCodecCtx->pix_fmt,
-                                                m_new_width, m_new_height,
-                                                m_pixelFormat,
-                                                SWS_OSG_CONVERSION_TYPE, NULL, NULL, NULL);
-                if(img_convert_ctx == NULL)
-                {
-                    av_free(buffer);
-                    OSG_FREE_FRAME (& pFrameRGB);
-
-                    fprintf(stderr, "Cannot initialize the video conversion context!\n");
-                    return -1;
-                }
-            }
-            sws_scale(img_convert_ctx, m_pSeekFrame->data,
-                      m_pSeekFrame->linesize, 0,
-                      pCodecCtx->height,
-                      pFrameRGB->data, pFrameRGB->linesize);
-#else
-        img_convert(pFrameRGB->data, m_pixelFormat, m_pSeekFrame->data,
-                    pCodecCtx->pix_fmt, pCodecCtx->width, pCodecCtx->height);
-#endif
-            memcpy (ptrRGBmap, pFrameRGB->data[0], rgbFrameSize);
-
-            //
-            //
-            av_free(buffer);
-            OSG_FREE_FRAME (& pFrameRGB);
-
-            ret = 0;
+            ret = ConvertToRGB (m_pSeekFrame, NULL, ptrRGBmap);
         }
     }
     else
     {
-        fprintf (stderr, "Cannot seek video frame\n");
+        av_log(NULL, AV_LOG_ERROR, "Cannot seek video frame");
     }
 
     return ret;
+}
+
+const int
+FFmpegVideoReader::ConvertToRGB(AVFrame * pSrcFrame, uint8_t * prealloc_buffer, unsigned char * ptrRGBmap)
+{
+    AVCodecContext *  pCodecCtx = m_fmt_ctx_ptr->streams[m_videoStreamIndex]->codec;
+
+    const int   rgbFrameSize    = avpicture_get_size(m_pixelFormat, m_new_width, m_new_height);
+    AVFrame *   pFrameRGB       = OSG_ALLOC_FRAME();
+
+    if(pFrameRGB==NULL)
+        return -1;
+
+    pFrameRGB->width = m_new_width;
+    pFrameRGB->height = m_new_height;
+    pFrameRGB->format = m_pixelFormat;
+
+    // Determine required buffer size and allocate buffer
+    uint8_t *   buffer          = (prealloc_buffer == NULL) ? (uint8_t*)av_malloc(rgbFrameSize) : prealloc_buffer;
+
+    // Assign appropriate parts of buffer to image planes in pFrameRGB
+    avpicture_fill((AVPicture *)pFrameRGB, buffer, m_pixelFormat, m_new_width, m_new_height);
+    //
+    // Convert the image into necessary format
+    if (m_pExtDecoder != NULL)
+    {
+        if (m_pExtDecoder->Convert(pSrcFrame, pFrameRGB) < 0)
+            return -1;
+    }
+    else
+    {
+#ifdef USE_SWSCALE
+        if(img_convert_ctx == NULL)
+        {
+            img_convert_ctx = sws_getContext(pCodecCtx->width, pCodecCtx->height, pCodecCtx->pix_fmt,
+                                            m_new_width, m_new_height, m_pixelFormat,
+                                            SWS_OSG_CONVERSION_TYPE, NULL, NULL, NULL);
+            if(img_convert_ctx == NULL)
+            {
+                if (prealloc_buffer == NULL)
+                    av_free(buffer);
+
+                OSG_FREE_FRAME (& pFrameRGB);
+
+                av_log(NULL, AV_LOG_ERROR, "Cannot initialize the video conversion context!");
+                return -1;
+            }
+        }
+        sws_scale(img_convert_ctx, pSrcFrame->data,
+                  pSrcFrame->linesize, 0,
+                  pCodecCtx->height,
+                  pFrameRGB->data, pFrameRGB->linesize);
+#else
+        img_convert(pFrameRGB->data, m_pixelFormat,
+                    pSrcFrame->data, pCodecCtx->pix_fmt,
+                    pCodecCtx->width, pCodecCtx->height);
+#endif
+        if (ptrRGBmap != NULL)
+            memcpy (ptrRGBmap, pFrameRGB->data[0], rgbFrameSize);
+    }
+
+
+    //
+    //
+    if (prealloc_buffer == NULL)
+        av_free(buffer);
+    OSG_FREE_FRAME (& pFrameRGB);
+
+    return 0;
 }
 
 } // namespace osgFFmpeg
