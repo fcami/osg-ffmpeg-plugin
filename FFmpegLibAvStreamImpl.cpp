@@ -541,7 +541,10 @@ FFmpegLibAvStreamImpl::postRun()
             if (m_loop)
                 m_pPlayer->play();
             else
-            	m_audio_sink->play(); // Cover edge case of paused audio sink still holding buffered data.
+            {
+                if (m_audio_sink.valid())
+                    m_audio_sink->play(); // Cover edge case of paused audio sink still holding buffered data.
+            }
         }
     }
 }
