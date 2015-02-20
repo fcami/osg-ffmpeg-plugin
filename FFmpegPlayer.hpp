@@ -27,7 +27,7 @@
 namespace osgFFmpeg {
 
 // This parameter should be incremented each time before commit to repository
-#define OSG_FFMPEG_PLUGIN_RELEASE_VERSION_INT   10
+#define OSG_FFMPEG_PLUGIN_RELEASE_VERSION_INT   11
 
 
 template <class T>
