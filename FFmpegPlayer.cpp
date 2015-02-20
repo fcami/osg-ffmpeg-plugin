@@ -78,26 +78,28 @@ bool FFmpegPlayer::open(const std::string & filename, FFmpegParameters* paramete
         m_fileHolder.close();
         return false;
     }
+    // If video exist...
+    if (m_fileHolder.videoIndex() >= 0)
+    {
+        GLint                   internalTexFmt;
+        GLint                   pixFmt;
+        FFmpegFileHolder::getGLPixFormats (m_fileHolder.getPixFormat(), internalTexFmt, pixFmt);
 
-    GLint                   internalTexFmt;
-    GLint                   pixFmt;
-    FFmpegFileHolder::getGLPixFormats (m_fileHolder.getPixFormat(), internalTexFmt, pixFmt);
-
-    setImage(
-        m_fileHolder.width(), m_fileHolder.height(), 1, internalTexFmt, pixFmt, GL_UNSIGNED_BYTE,
-        const_cast<unsigned char *>(m_streamer.getFrame()), NO_DELETE
-    );
+        setImage(
+            m_fileHolder.width(), m_fileHolder.height(), 1, internalTexFmt, pixFmt, GL_UNSIGNED_BYTE,
+            const_cast<unsigned char *>(m_streamer.getFrame()), NO_DELETE
+        );
 
 
-    setPixelAspectRatio(m_fileHolder.pixelAspectRatio());
+        setPixelAspectRatio(m_fileHolder.pixelAspectRatio());
 
-    OSG_NOTICE<<"ffmpeg::open("<<filename<<") size("<<s()<<", "<<t()<<") aspect ratio "<<m_fileHolder.pixelAspectRatio()<<std::endl;
+        OSG_NOTICE<<"ffmpeg::open("<<filename<<") size("<<s()<<", "<<t()<<") aspect ratio "<<m_fileHolder.pixelAspectRatio()<<std::endl;
 
-#if 1
-    // swscale is reported errors and then crashing when rescaling video of size less than 10 by 10.
-    if (s()<=10 || t()<=10) return false;
-#endif
-
+        // swscale is reported errors and then crashing when rescaling video of size less than 10 by 10.
+        if (s()<=10 || t()<=10)
+            return false;
+    }
+    // If audio exist...
     if (m_fileHolder.isHasAudio())
     {
         OSG_NOTICE<<"Attaching FFmpegAudioStream"<<std::endl;
