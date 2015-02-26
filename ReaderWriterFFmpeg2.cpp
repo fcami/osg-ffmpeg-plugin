@@ -106,6 +106,7 @@ public:
         supportsExtension("ogv",   "");
         supportsExtension("wav",   "");
         supportsExtension("aiff",   "");
+        supportsExtension("mp2",   "");
 
         supportsOption("format",            "Force setting input format (e.g. vfwcap for Windows webcam)");
         supportsOption("pixel_format",      "Set pixel format");
