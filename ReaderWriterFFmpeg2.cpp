@@ -61,8 +61,9 @@ static void log_to_osg(void *ptr, int level, const char *fmt, va_list vl)
     }
 
     // Most av_logs have a trailing newline already
-//    osg::notify(severity) << logbuf;
-    fprintf (stdout, "ffmpeg: %s\n", logbuf);
+    osg::notify(severity) << logbuf;
+
+    //fprintf (stdout, "ffmpeg: %s\n", logbuf);
 }
 
 } // extern "C"
