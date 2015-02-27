@@ -73,20 +73,11 @@ VideoVectorBuffer::alloc(const FFmpegFileHolder * pHolder)
     m_forcedFrameTimeMS              = -1.0;
     //
     // If buffer has been allocated before,
-    // * Exit with success, if necessary buffer has been opened for this video before
-    // * Release buffer, if buffer will be allocated for new video
+    // release it for guaranty that buffer will be clear
     //
     if (m_fileIndex >= 0)
     {
-        if (m_fileIndex == pHolder->videoIndex())
-        {
-            flush();
-            return 0;
-        }
-        else
-        {
-            release();
-        }
+        release();
     }
 
 

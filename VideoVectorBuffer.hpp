@@ -73,6 +73,7 @@ class VideoVectorBuffer
                     unsigned char * ptr = (unsigned char *)av_malloc(frameSize);
                     if (ptr != NULL)
                     {
+                        memset (ptr, frameSize, 0); // Clear frame to avoid prev memory state
                         m_ptr.push_back(ptr);
                     }
                     else

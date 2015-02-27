@@ -64,6 +64,8 @@ public:
     // Search index of video-stream. If no one video-stream had not been found, return error.
     const int           openFile(const char *filename, FFmpegParameters * parameters, float & aspectRatio, float & frame_rate, bool & alphaChannel);
     void                close(void);
+    /*fast seek may find keyframe, but not asked time and little less than ask*/
+    int                 fast_nonaccurate_seek(int64_t & timestamp/*milliseconds*/, unsigned char * ptrRGBmap);
     int                 seek(int64_t timestamp, unsigned char * ptrRGBmap);
     // buffer-size should be width*height*3 bytes;
     // - [minReqTimeMS] - if greater than 0, it is minimal time which will be searched to return frame.

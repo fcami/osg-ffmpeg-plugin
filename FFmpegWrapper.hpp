@@ -112,6 +112,7 @@ public:
     // - Size of [bufRGB24] should be at less = (3 * width * height) in bytes;
     // - If [msTime] is out of [getVideoTimeLimits] it will return error without any processing;
     static const short getImage(const long indexFile, unsigned long msTime, unsigned char * bufRGB24);
+    static const short getImageFastNonAccurate(const long indexFile, unsigned long & msTime, unsigned char * bufRGB24);
 
     // Get next frame(24-bit) from the video-file;
     //

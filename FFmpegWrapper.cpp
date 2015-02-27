@@ -196,6 +196,41 @@ FFmpegWrapper::getImage(const long indexFile, unsigned long msTime, unsigned cha
 }
 
 const short
+FFmpegWrapper::getImageFastNonAccurate(const long indexFile, unsigned long & msTime, unsigned char * bufRGB24)
+{
+    short ret_value = -1;
+    try
+    {
+        if (checkIndexVideoValid(indexFile) == 0 && bufRGB24 != NULL)
+        {
+            unsigned long timeLimits[2];
+            if (FFmpegWrapper::getVideoTimeLimits(indexFile, &timeLimits[0]) == 0)
+            {
+                if (msTime >= timeLimits[0] && msTime <= timeLimits[1])
+                {
+                    int64_t         timestamp(msTime);
+                    const int       seekRez = g_openedVideoFiles[indexFile]->fast_nonaccurate_seek(timestamp, bufRGB24);
+                    if (seekRez == 0)
+                    {
+                        msTime = timestamp;
+                        ret_value = 0;
+                    }
+                }
+                else
+                {
+                    av_log(NULL, AV_LOG_WARNING, "Video seeking: asked time is out of range");
+                }
+            }
+        }
+    }
+    catch (...)
+    {
+        ret_value = -1;
+    }
+    return ret_value;
+}
+
+const short
 FFmpegWrapper::getNextImage(const long indexFile, unsigned char * bufRGB24, double & timeStampInSec, const size_t & drop_frame_nb, const bool decodeTillMinReqTime, const double minReqTimeMS)
 {
     short ret_value = -1;
