@@ -781,6 +781,55 @@ av_log(NULL, AV_LOG_DEBUG, "GetNextFrame + sws_scale spent %3d %3d ms Time: %4d 
 }
 
 int
+FFmpegVideoReader::fast_nonaccurate_seek(int64_t & timestamp/*milliseconds*/, unsigned char * ptrRGBmap)
+{
+    if (ptrRGBmap == NULL)
+    {
+        return -1;
+    }
+
+    //
+    // convert to AV_TIME_BASE
+    //
+    timestamp *= AV_TIME_BASE / 1000;
+
+    int             ret             = -1;
+    //
+    // add the stream start time
+    if (m_fmt_ctx_ptr->start_time != AV_NOPTS_VALUE)
+        timestamp += m_fmt_ctx_ptr->start_time;
+
+    int64_t         seek_target     = av_rescale_q (timestamp,
+                                                    osg_get_time_base_q(),
+                                                    m_fmt_ctx_ptr->streams[m_videoStreamIndex]->time_base);
+
+    m_FirstFrame = true;
+
+    int             retValueSeekFrame = av_seek_frame ( m_fmt_ctx_ptr,
+                                                        m_videoStreamIndex,
+                                                        seek_target,
+                                                        AVSEEK_FLAG_BACKWARD);
+    if (retValueSeekFrame >= 0)
+    {
+        unsigned long       packetPosLoop;
+        double              timeLoop;
+
+        AVCodecContext *    pCodecCtx = m_fmt_ctx_ptr->streams[m_videoStreamIndex]->codec;
+        avcodec_flush_buffers(pCodecCtx);
+
+        GetNextFrame(pCodecCtx, m_pSeekFrame, packetPosLoop, timeLoop);
+        timestamp = timeLoop * 1000;
+        ret = ConvertToRGB (m_pSeekFrame, NULL, ptrRGBmap);
+    }
+    else
+    {
+        av_log(NULL, AV_LOG_ERROR, "Cannot seek video frame");
+    }
+
+    return ret;
+}
+
+int
 FFmpegVideoReader::seek(int64_t timestamp/*milliseconds*/, unsigned char * ptrRGBmap)
 {
     if (ptrRGBmap == NULL)

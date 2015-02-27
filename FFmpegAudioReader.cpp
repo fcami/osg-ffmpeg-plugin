@@ -28,29 +28,7 @@ namespace osgFFmpeg {
 
 AVRational osg_get_time_base_q(void);
 
-/*
-int64_t bigFileSize(const char *path)
-{
-#ifdef WIN32
-    struct __stat64 S;
-    if(-1 == _stat64(path, &S))
-    {
-        printf("Error!\r\n");
-        return -1;
-    }
-#else
-    struct stat64 S;
-    if(-1 == stat64(path, &S))
-    {
-        printf("Error!\r\n");
-        return -1;
-    }
-#endif
 
-
-    return S.st_size;
-}
-*/
 const int
 FFmpegAudioReader::openFile(const char *filename, FFmpegParameters * parameters)
 {
@@ -632,7 +610,7 @@ FFmpegAudioReader::seek(int64_t timestamp )
     m_FirstFrame = true;
 
     //
-    // For some AC3-audio seek by AVSEEK_FLAG_BACKWARD returns WRONG values.
+    //
     const int seekVal = av_seek_frame(m_fmt_ctx_ptr, m_audioStreamIndex, seek_target, seek_flags);
     if (seekVal < 0)
     {

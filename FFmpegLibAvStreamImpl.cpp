@@ -446,9 +446,39 @@ FFmpegLibAvStreamImpl::stopShadowThread()
 void
 FFmpegLibAvStreamImpl::preRun()
 {
-    const unsigned long elapsedTimeMS = m_playerTimer.ElapsedMilliseconds ();
+    unsigned long   elapsedTimeMS = m_playerTimer.ElapsedMilliseconds ();
     m_ellapsedAudioMicroSec = 0;
     m_ellapsedAudioMicroSecOffsetInitial = 0;
+    //
+    // Because Video-seeking may be non-accurate(for speed-performance), actual playback time-stamp
+    // may be corrected during seeking. So firstable seeking the video.
+    //
+    // Prepare Video to streaming
+    //
+    if (isHasVideo())
+    {
+        if (m_isNeedFlushBuffers == true)
+        {
+            m_video_buffer.flush();
+
+            unsigned char * pFrame;
+            // todo: should be processed to error
+            const int biErr = m_video_buffer.GetFramePtr(0, pFrame, true);
+
+            const short sErr = FFmpegWrapper::getImageFastNonAccurate(m_videoIndex, elapsedTimeMS, pFrame);
+            m_video_buffer.ReleaseFoundFrame();
+
+            if (sErr >= 0)
+            {
+                // Correct actual playback time by founded value from fast-video-seek
+                m_playerTimer.ElapsedMilliseconds(elapsedTimeMS);
+            }
+            else
+            {
+                m_video_buffer.setStreamFinished (true);
+            }
+        }
+    }
     //
     // Prepare Audio to streaming
     //
@@ -478,26 +508,6 @@ FFmpegLibAvStreamImpl::preRun()
             m_audioFormat.clear();
             m_audio_buffer.release();
             m_audioIndex = -1;
-        }
-    }
-    //
-    if (isHasVideo())
-    {
-        if (m_isNeedFlushBuffers == true)
-        {
-            m_video_buffer.flush();
-
-            unsigned char * pFrame;
-            // todo: should be processed to error
-            const int biErr = m_video_buffer.GetFramePtr(0, pFrame, true);
-
-            const short sErr = FFmpegWrapper::getImage(m_videoIndex, elapsedTimeMS, pFrame);
-            m_video_buffer.ReleaseFoundFrame();
-
-            if (sErr < 0)
-            {
-                m_video_buffer.setStreamFinished (true);
-            }
         }
     }
 }
