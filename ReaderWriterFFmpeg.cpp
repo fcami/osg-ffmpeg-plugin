@@ -70,14 +70,14 @@ static void log_to_osg(void *ptr, int level, const char *fmt, va_list vl)
 
 /** Implementation heavily inspired by http://www.dranger.com/ffmpeg/ */
 
-class ReaderWriterFFmpeg2 : public osgDB::ReaderWriter
+class ReaderWriterFFmpeg : public osgDB::ReaderWriter
 {
 public:
 
-    ReaderWriterFFmpeg2()
+    ReaderWriterFFmpeg()
     {
         av_log_set_callback(log_to_osg);
-        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2()");
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg::ReaderWriterFFmpeg()");
 
 
 
@@ -120,22 +120,22 @@ public:
 #ifdef USE_AV_LOCK_MANAGER
         // enable thread locking
         av_lockmgr_register(&lockMgr);
-        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() av_lockmgr_register()");
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg::ReaderWriterFFmpeg() av_lockmgr_register()");
 
 #endif
         // Register all FFmpeg formats/codecs
         av_register_all();
-        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() av_register_all()");
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg::ReaderWriterFFmpeg() av_register_all()");
 
 #if LIBAVFORMAT_VERSION_MAJOR >= 54
         avformat_network_init();
-        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::ReaderWriterFFmpeg2() avformat_network_init()");
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg::ReaderWriterFFmpeg() avformat_network_init()");
 #else
         av_log(NULL, AV_LOG_INFO, "This ver of libavformat does not support avformat_network_init()");
 #endif
     }
 
-    virtual ~ReaderWriterFFmpeg2()
+    virtual ~ReaderWriterFFmpeg()
     {
         // Undo the initialization done by avformat_network_init.
 #if LIBAVFORMAT_VERSION_MAJOR >= 54
@@ -147,7 +147,7 @@ public:
 
     virtual const char * className() const
     {
-        return "ReaderWriterFFmpeg2";
+        return "ReaderWriterFFmpeg";
     }
 
     virtual ReadResult readImage(const std::string & filename, const osgDB::ReaderWriter::Options* options) const
@@ -187,7 +187,7 @@ public:
 
     ReadResult readImageStream(const std::string& filename, osgFFmpeg::FFmpegParameters* parameters) const
     {
-        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg2::readImage %s", filename.c_str());
+        av_log(NULL, AV_LOG_INFO, "ReaderWriterFFmpeg::readImage %s", filename.c_str());
 
 
         osg::ref_ptr<osgFFmpeg::FFmpegPlayer> image_stream(new osgFFmpeg::FFmpegPlayer);
@@ -258,4 +258,4 @@ private:
 
 
 
-REGISTER_OSGPLUGIN(ffmpeg, ReaderWriterFFmpeg2)
+REGISTER_OSGPLUGIN(ffmpeg, ReaderWriterFFmpeg)
