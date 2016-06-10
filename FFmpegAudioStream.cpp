@@ -41,7 +41,8 @@ FFmpegAudioStream::FFmpegAudioStream(const FFmpegAudioStream & audio, const osg:
 FFmpegAudioStream::~FFmpegAudioStream()
 {
     // detact the audio sink first to avoid destrction order issues.
-    setAudioSink (NULL);
+    // trystan: caused #3333, crash on close audio.
+ //   setAudioSink (NULL);
 }
 
 void FFmpegAudioStream::setAudioSink(osg::AudioSink* audio_sink)

@@ -117,6 +117,7 @@ bool FFmpegPlayer::open(const std::string & filename, FFmpegParameters* paramete
 
 void FFmpegPlayer::close()
 {
+    m_streamer.setAudioSink(NULL);
     m_streamer.close();
     m_fileHolder.close();
 }
